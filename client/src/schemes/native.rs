@@ -3,9 +3,10 @@
 //! `key,value` and the pairs joined by `;`, so the same attributes always land in the same
 //! credential, and listing the prefix yields every item's attributes without reading a secret.
 //!
-//! Keys and values are percent-encoded down to unreserved characters. Besides keeping the
-//! separators unambiguous, that leaves no `=` or `:` after the prefix: the Credential Manager
-//! leaves a target out of listings when `service=` or `target=` follows its first colon.
+//! Keys and values are percent-encoded down to unreserved characters other than capital letters.
+//! Besides keeping the separators unambiguous, that leaves no `=` or `:` after the prefix: the
+//! Credential Manager leaves a target out of listings when `service=` or `target=` follows its
+//! first colon.
 
 use credrelay_protocol::Credential;
 
@@ -18,11 +19,22 @@ use crate::schemes::Prefixes;
 pub const PREFIX: &str = "credrelay:";
 const PAIRS: char = ';';
 const KEY_VALUE: char = ',';
-const RESERVED: &AsciiSet = &NON_ALPHANUMERIC
-    .remove(b'-')
-    .remove(b'.')
-    .remove(b'_')
-    .remove(b'~');
+/// Unreserved characters stay as they are, except capital letters: the Credential Manager compares
+/// targets regardless of case, so a value differing from another only in case must differ from it
+/// in more than case once encoded.
+const RESERVED: &AsciiSet = &{
+    let mut set = NON_ALPHANUMERIC
+        .remove(b'-')
+        .remove(b'.')
+        .remove(b'_')
+        .remove(b'~');
+    let mut capital = b'A';
+    while capital <= b'Z' {
+        set = set.add(capital);
+        capital += 1;
+    }
+    set
+};
 
 pub struct Native {
     prefixes: Prefixes,
@@ -128,6 +140,27 @@ mod tests {
         let target = Native::default().credential(&attributes).unwrap().target;
         let encoded = target.strip_prefix(PREFIX).unwrap();
         assert!(!encoded.contains(['=', ':']), "{target}");
+    }
+
+    /// The Credential Manager compares targets regardless of case, so attributes that differ only
+    /// in case must not name targets that differ only in case.
+    #[test]
+    fn attributes_differing_only_in_case_name_different_credentials() {
+        let upper = Native::default()
+            .credential(&attributes(&[("user", "Alice")]))
+            .unwrap();
+        let lower = Native::default()
+            .credential(&attributes(&[("user", "alice")]))
+            .unwrap();
+        assert_ne!(
+            upper.target.to_lowercase(),
+            lower.target.to_lowercase(),
+            "{upper:?} {lower:?}"
+        );
+        assert_eq!(
+            Native::default().attributes(&upper),
+            Some(attributes(&[("user", "Alice")]))
+        );
     }
 
     #[test]

@@ -62,7 +62,9 @@ attributes happen to spell out someone else's target name lands under `credrelay
 
 The `credrelay:` encoding leaves no `=` or `:` after the prefix because the Credential Manager leaves
 a target out of listings when `service=` or `target=` follows its first colon (a test in
-`wincred/src/lib.rs` holds this).
+`wincred/src/store.rs` holds this). It also percent-encodes capital letters, because the Credential
+Manager compares targets regardless of case: attributes that differ only in case would otherwise
+share one credential.
 
 ### What the service implements
 
