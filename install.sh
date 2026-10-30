@@ -36,7 +36,10 @@ echo "==> Building credrelay-server (release, $WIN_TARGET)"
 # one goes in; a client started afterwards would otherwise get an old server back.
 if systemctl --user show-environment >/dev/null 2>&1; then
     WAS_ACTIVE="$(systemctl --user is-active credrelay.service || true)"
-    systemctl --user stop credrelay.service
+    # A unit not installed yet reads as inactive, and stopping it would fail the first install.
+    if [ "$WAS_ACTIVE" != inactive ]; then
+        systemctl --user stop credrelay.service
+    fi
 else
     WAS_ACTIVE=inactive
 fi
@@ -51,15 +54,20 @@ cargo install --path "$REPO_DIR/keyring"
 
 # Windows applications run the Windows helpers, so the Windows toolchain installs them into its own
 # cargo bin directory. It reads the sources through \\wsl.localhost but builds under %TEMP%, since
-# building on that share is slow. cmd.exe can't start in a WSL directory, hence the cd.
+# building on that share is slow. cargo.exe is run directly rather than through cmd.exe /c, which
+# would split the source path at a space or an &; WSLENV hands it CARGO_TARGET_DIR. cmd.exe can't
+# start in a WSL directory, hence the cd.
 echo "==> Installing the Windows credrelay-keyring and credrelay-bao-helper (Windows cargo install)"
-if ! cmd.exe /c "where cargo" > /dev/null 2>&1; then
-    echo "credrelay install.sh: no cargo on the Windows side; install Rust for Windows first" >&2
-    exit 1
-fi
 (
     cd "$(wslpath "$(cmd.exe /c 'echo %SystemRoot%' 2>/dev/null | tr -d '\r')")"
-    cmd.exe /c "set CARGO_TARGET_DIR=%TEMP%\\credrelay-target&& cargo install --path $(wslpath -w "$REPO_DIR/keyring")"
+    WIN_CARGO="$(cmd.exe /c 'where cargo' 2>/dev/null | tr -d '\r' | head -n 1)"
+    if [ -z "$WIN_CARGO" ]; then
+        echo "credrelay install.sh: no cargo on the Windows side; install Rust for Windows first" >&2
+        exit 1
+    fi
+    WIN_TEMP="$(cmd.exe /c 'echo %TEMP%' 2>/dev/null | tr -d '\r')"
+    CARGO_TARGET_DIR="$WIN_TEMP\\credrelay-target" WSLENV="${WSLENV:+$WSLENV:}CARGO_TARGET_DIR" \
+        "$(wslpath "$WIN_CARGO")" install --path "$(wslpath -w "$REPO_DIR/keyring")"
 )
 
 echo "==> Installing the systemd user unit and the D-Bus activation file"
