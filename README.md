@@ -118,14 +118,22 @@ then copy `contrib/credrelay.service` and `contrib/org.freedesktop.secrets.servi
 ### Moving gh and glab onto the keyring
 
 An existing plaintext login stays where it is: an application reads the keyring only for what it
-stored there. With credrelay running:
+stored there. With credrelay running, and the Windows build already logged in to the same account,
+the Linux build takes over the Windows login with no new login at all:
 
-- `gh auth status` says where each token lives. A plaintext token moves with `gh auth login`, which
-  stores into the keyring when one is available. If the Windows `gh` is already logged in to the same
-  account, removing `oauth_token` from `~/.config/gh/hosts.yml` instead makes the Linux `gh` pick up
-  the Windows token.
-- `glab auth login` tries a test write to the keyring and, when it succeeds, stores the token there;
-  logging in again moves a plaintext login.
+- `gh`: delete every `oauth_token` line from `~/.config/gh/hosts.yml`, leaving `user` and the
+  account under `users` (as `<account>: {}`). `gh` then reads the active account's token from the
+  keyring; `gh auth status` reports it as `(keyring)`.
+- `glab`: in `~/.config/glab-cli/config.yml`, under the host, set `use_keyring: "true"`, empty
+  `token` and `oauth2_refresh_token`, and copy `oauth2_expiry_date` from the Windows build's config
+  (`%USERPROFILE%\.config\glab-cli\config.yml`), which holds the expiry of the token now in the
+  keyring. `glab auth status` then reports `Token found in operating system keyring`.
+
+  `use_keyring` matters beyond reading: with it `"false"`, every token `glab` writes, a refresh
+  included, also deletes the keyring copy, which is now the Windows login.
+
+Logging in again on the Linux side (`gh auth login`, `glab auth login`) works too, and replaces the
+token the Windows build uses.
 
 Both sides now share one credential, so **logging out on either side logs out both**.
 
