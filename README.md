@@ -220,6 +220,23 @@ Both sides must reach the server under the same address (`BAO_ADDR` or `VAULT_AD
 the key. bao asks the helper only when `BAO_TOKEN` and `VAULT_TOKEN` are unset. `bao login` stores
 the token through it; `bao token renew` renews the same token, so both sides keep using it.
 
+### When gh or glab hangs
+
+Every call that needs a token reads it from the keyring, so a stopped or stuck credrelay shows up as
+`gh` or `glab` hanging with no output, `glab` saying it failed to read from the operating system
+keyring, or `gh` saying it isn't logged in. An HTTP 401, 403 or 405 from the forge is about rights or
+state there, not credrelay. These answer at once when credrelay is well:
+
+```sh
+systemctl --user is-active credrelay
+timeout 5 busctl --user call org.freedesktop.secrets /org/freedesktop/secrets \
+  org.freedesktop.DBus.Properties Get ss org.freedesktop.Secret.Service Collections
+journalctl --user -u credrelay -n 30 --no-pager
+```
+
+While investigating, don't run `gh auth logout` or `glab auth logout`: they delete the shared
+credential, which logs the Windows side out too.
+
 ## Logging
 
 The client logs to stderr, which systemd sends to the journal; colors only on a terminal. Verbosity
