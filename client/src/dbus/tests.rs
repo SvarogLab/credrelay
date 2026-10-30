@@ -241,6 +241,24 @@ impl Fixture {
     }
 }
 
+/// A second instance on the same bus must fail, not take the name from the one serving: under
+/// systemd the one losing it stops, and the one taking it isn't the service systemd started.
+#[tokio::test]
+async fn a_second_instance_fails_and_the_first_keeps_the_name() {
+    let fixture = Fixture::start().await;
+    let second = serve(
+        zbus::connection::Builder::address(fixture.bus.address.as_str()),
+        keyring(),
+    )
+    .await;
+    assert!(second.is_err(), "the second instance took the name");
+    fixture.set("gh:github.com", "", "t0ken").await.unwrap();
+    assert_eq!(
+        fixture.get("gh:github.com", "").await.as_deref(),
+        Some("t0ken")
+    );
+}
+
 #[tokio::test]
 async fn go_keyring_reads_back_what_it_set() {
     let fixture = Fixture::start().await;

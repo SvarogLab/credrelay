@@ -44,6 +44,10 @@ pub async fn serve(
         .serve_at(SERVICE_PATH, service::Service::new(state.clone()))
         .serve_at(LOGIN_PATH, collection::Collection::new(state.clone()))
         .serve_at(DEFAULT_ALIAS_PATH, collection::Collection::new(state))
+        // zbus would otherwise take the name from an instance already serving, and let the next
+        // one take it from this.
+        .replace_existing_names(false)
+        .allow_name_replacements(false)
         .name(BUS_NAME)
         .build()
         .await
