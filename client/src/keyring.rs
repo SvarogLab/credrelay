@@ -49,13 +49,10 @@ impl Keyring {
         for scheme in &self.schemes {
             for prefix in prefixes_to_list(scheme.as_ref(), attributes) {
                 for credential in self.rpc.list(&prefix).await? {
-                    let Some(item_attributes) = scheme.attributes(&credential) else {
-                        continue;
-                    };
-                    let matches = attributes
-                        .iter()
-                        .all(|(key, value)| item_attributes.get(key) == Some(value));
-                    if matches {
+                    if let Some(item_attributes) = scheme
+                        .attributes(&credential)
+                        .filter(|item_attributes| includes(item_attributes, attributes))
+                    {
                         found.entry(credential.target).or_insert(item_attributes);
                     }
                 }
@@ -109,6 +106,13 @@ impl Keyring {
             Err(KeyringError::NotAllowed(target.to_owned()))
         }
     }
+}
+
+/// Whether `item` has every attribute of `wanted`, with the same value.
+fn includes(item: &Attributes, wanted: &Attributes) -> bool {
+    wanted
+        .iter()
+        .all(|(key, value)| item.get(key) == Some(value))
 }
 
 /// What to list to find a scheme's items matching a search: the scheme's own search prefix if it
@@ -175,7 +179,7 @@ mod tests {
             .await
             .unwrap();
         let mut targets: Vec<_> = by_service.iter().map(|item| item.target.as_str()).collect();
-        targets.sort();
+        targets.sort_unstable();
         assert_eq!(targets, ["gh:github.com:", "gh:github.com:octo"]);
 
         assert_eq!(keyring.search(&Attributes::new()).await.unwrap().len(), 3);

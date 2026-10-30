@@ -17,7 +17,7 @@ impl SessionObject {
 
 #[interface(name = "org.freedesktop.Secret.Session")]
 impl SessionObject {
-    async fn close(&self, #[zbus(connection)] connection: &Connection) {
+    fn close(&self, #[zbus(connection)] connection: &Connection) {
         self.state.sessions().remove(&self.path);
         unexport::<Self>(connection, self.path.clone());
     }

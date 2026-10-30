@@ -21,7 +21,7 @@ impl Collection {
 
 #[interface(name = "org.freedesktop.Secret.Collection")]
 impl Collection {
-    async fn delete(&self) -> Result<OwnedObjectPath, Error> {
+    fn delete(&self) -> Result<OwnedObjectPath, Error> {
         Err(Error::NotSupported(
             "the login collection can't be deleted".into(),
         ))
@@ -46,8 +46,7 @@ impl Collection {
         #[zbus(object_server)] server: &ObjectServer,
     ) -> Result<(OwnedObjectPath, OwnedObjectPath), Error> {
         let attributes = match properties.get(ATTRIBUTES_PROPERTY) {
-            Some(value) => Attributes::try_from(value.try_clone()?)
-                .map_err(|error| Error::InvalidArgs(error.to_string()))?,
+            Some(value) => Attributes::try_from(value.try_clone()?).map_err(Error::invalid_args)?,
             None => Attributes::new(),
         };
         let secret = self.state.secret_from(&secret)?;

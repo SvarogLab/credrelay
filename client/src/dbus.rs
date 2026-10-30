@@ -104,20 +104,7 @@ async fn close_sessions_of_departed(
         if args.new_owner().is_some() || !args.name().starts_with(':') {
             continue;
         }
-        let departed = args.name().to_string();
-        let closed: Vec<OwnedObjectPath> = {
-            let mut sessions = state.sessions();
-            let closed = sessions
-                .iter()
-                .filter(|(_, session)| session.owner == departed)
-                .map(|(path, _)| path.clone())
-                .collect::<Vec<_>>();
-            for path in &closed {
-                sessions.remove(path);
-            }
-            closed
-        };
-        for path in closed {
+        for path in state.take_sessions_of(args.name()) {
             unexport::<session::SessionObject>(&connection, path);
         }
     }
@@ -161,6 +148,20 @@ impl State {
             .expect("no code holding the exported items panics")
     }
 
+    /// Forgets every session `owner` opened, returning their paths.
+    fn take_sessions_of(&self, owner: &str) -> Vec<OwnedObjectPath> {
+        let mut sessions = self.sessions();
+        let taken: Vec<_> = sessions
+            .iter()
+            .filter(|(_, session)| session.owner == owner)
+            .map(|(path, _)| path.clone())
+            .collect();
+        for path in &taken {
+            sessions.remove(path);
+        }
+        taken
+    }
+
     fn encoding(&self, session: &OwnedObjectPath) -> Result<Arc<Encoding>, Error> {
         self.sessions()
             .get(session)
@@ -193,7 +194,7 @@ impl State {
             )
             .await?;
         let owner_present = has_owner(connection, owner).await;
-        if let Ok(true) = owner_present {
+        if owner_present == Ok(true) {
             return Ok(());
         }
         self.sessions().remove(&path);
@@ -318,6 +319,14 @@ impl From<KeyringError> for Error {
             KeyringError::NotFound => Self::NoSuchObject(message),
             KeyringError::Failed(_) => Self::Failed(message),
         }
+    }
+}
+
+impl Error {
+    /// An argument that isn't of the type the method takes. The D-Bus error carries a message
+    /// and nothing else, so the cause goes in as text.
+    fn invalid_args(error: zbus::Error) -> Self {
+        Self::InvalidArgs(error.to_string())
     }
 }
 

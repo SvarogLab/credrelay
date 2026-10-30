@@ -30,19 +30,10 @@ impl Service {
     ) -> Result<(OwnedVariant, OwnedObjectPath), Error> {
         let owner = header
             .sender()
-            .map(|sender| sender.to_string())
+            .map(ToString::to_string)
             .ok_or_else(|| Error::InvalidArgs("a session needs a sender to belong to".into()))?;
-        let input = match algorithm {
-            encoding::PLAIN => Vec::new(),
-            _ => {
-                Vec::<u8>::try_from(input).map_err(|error| Error::InvalidArgs(error.to_string()))?
-            }
-        };
-        let (encoding, output) = Encoding::negotiate(algorithm, &input)?;
-        let output = match encoding {
-            Encoding::Plain => OwnedVariant::try_from(Variant::from("")),
-            Encoding::Aes(_) => OwnedVariant::try_from(Variant::from(output)),
-        }?;
+        let (encoding, output) = Encoding::negotiate(algorithm, &client_input(algorithm, input)?)?;
+        let output = session_output(&encoding, output)?;
         let path = self.state.new_session_path();
         let session = Session {
             encoding: Arc::new(encoding),
@@ -54,7 +45,7 @@ impl Service {
         Ok((output, path))
     }
 
-    async fn create_collection(
+    fn create_collection(
         &self,
         _properties: HashMap<String, OwnedVariant>,
         _alias: &str,
@@ -72,17 +63,11 @@ impl Service {
         Ok((self.state.search(server, &attributes).await?, Vec::new()))
     }
 
-    async fn unlock(
-        &self,
-        objects: Vec<OwnedObjectPath>,
-    ) -> (Vec<OwnedObjectPath>, OwnedObjectPath) {
+    fn unlock(&self, objects: Vec<OwnedObjectPath>) -> (Vec<OwnedObjectPath>, OwnedObjectPath) {
         (objects, no_prompt())
     }
 
-    async fn lock(
-        &self,
-        _objects: Vec<OwnedObjectPath>,
-    ) -> (Vec<OwnedObjectPath>, OwnedObjectPath) {
+    fn lock(&self, _objects: Vec<OwnedObjectPath>) -> (Vec<OwnedObjectPath>, OwnedObjectPath) {
         (Vec::new(), no_prompt())
     }
 
@@ -101,7 +86,7 @@ impl Service {
         Ok(secrets)
     }
 
-    async fn read_alias(&self, name: &str) -> OwnedObjectPath {
+    fn read_alias(&self, name: &str) -> OwnedObjectPath {
         match name {
             "default" | "login" => {
                 OwnedObjectPath::try_from(LOGIN_PATH).expect("a valid object path")
@@ -110,13 +95,29 @@ impl Service {
         }
     }
 
-    async fn set_alias(&self, _name: &str, _collection: OwnedObjectPath) -> Result<(), Error> {
+    fn set_alias(&self, _name: &str, _collection: OwnedObjectPath) -> Result<(), Error> {
         Err(Error::NotSupported("aliases are fixed".into()))
     }
 
     #[zbus(property)]
     fn collections(&self) -> Vec<OwnedObjectPath> {
         vec![OwnedObjectPath::try_from(LOGIN_PATH).expect("a valid object path")]
+    }
+}
+
+/// The bytes the client sent for `algorithm`: none for plain, whose input is an empty string.
+fn client_input(algorithm: &str, input: OwnedVariant) -> Result<Vec<u8>, Error> {
+    match algorithm {
+        encoding::PLAIN => Ok(Vec::new()),
+        _ => Vec::<u8>::try_from(input).map_err(Error::invalid_args),
+    }
+}
+
+/// What `OpenSession` hands back: an empty string for plain, the service's public key otherwise.
+fn session_output(encoding: &Encoding, output: Vec<u8>) -> zbus::Result<OwnedVariant> {
+    match encoding {
+        Encoding::Plain => OwnedVariant::try_from(Variant::from("")),
+        Encoding::Aes(_) => OwnedVariant::try_from(Variant::from(output)),
     }
 }
 

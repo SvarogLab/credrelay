@@ -5,6 +5,8 @@
 //! info over the shared secret padded to the group size, and AES-128-CBC with PKCS#7 padding under
 //! a fresh IV per secret, sent as the secret's parameters.
 
+use std::sync::LazyLock;
+
 use aes::Aes128;
 use cbc::cipher::block_padding::Pkcs7;
 use cbc::cipher::{BlockModeDecrypt, BlockModeEncrypt, KeyIvInit};
@@ -46,9 +48,9 @@ pub enum Encoding {
     Aes(AesKey),
 }
 
-fn oakley_group_2_prime() -> BigUint {
+static OAKLEY_GROUP_2: LazyLock<BigUint> = LazyLock::new(|| {
     BigUint::parse_bytes(OAKLEY_GROUP_2_PRIME.as_bytes(), 16).expect("the group prime is valid hex")
-}
+});
 
 /// The client's public key, if it lies strictly between 1 and `prime - 1`: the values outside
 /// confine the shared secret to a trivial subgroup.
@@ -93,11 +95,11 @@ impl Encoding {
         match algorithm {
             PLAIN => Ok((Self::Plain, Vec::new())),
             DH_AES => {
-                let prime = oakley_group_2_prime();
-                let client_public = validate_client_public_key(input, &prime)?;
+                let prime = &*OAKLEY_GROUP_2;
+                let client_public = validate_client_public_key(input, prime)?;
                 let private = generate_private_key()?;
-                let public = BigUint::from(2u8).modpow(&private, &prime);
-                let shared = derive_shared_secret(&client_public, &private, &prime);
+                let public = BigUint::from(2u8).modpow(&private, prime);
+                let shared = derive_shared_secret(&client_public, &private, prime);
                 Ok((Self::Aes(expand_session_key(&shared)), public.to_bytes_be()))
             }
             other => Err(EncodingError::Unsupported(other.to_owned())),
@@ -173,25 +175,25 @@ mod tests {
 
     #[test]
     fn a_client_public_key_must_lie_strictly_between_1_and_the_prime_minus_1() {
-        let prime = oakley_group_2_prime();
+        let prime = &*OAKLEY_GROUP_2;
         for out_of_range in [
             BigUint::ZERO,
             BigUint::from(1u8),
-            &prime - 1u8,
+            prime - 1u8,
             prime.clone(),
-            &prime + 1u8,
+            prime + 1u8,
         ] {
             assert!(
                 matches!(
-                    validate_client_public_key(&out_of_range.to_bytes_be(), &prime),
+                    validate_client_public_key(&out_of_range.to_bytes_be(), prime),
                     Err(EncodingError::PublicKeyOutOfRange)
                 ),
                 "{out_of_range:x}"
             );
         }
-        for in_range in [BigUint::from(2u8), &prime - 2u8] {
+        for in_range in [BigUint::from(2u8), prime - 2u8] {
             assert_eq!(
-                validate_client_public_key(&in_range.to_bytes_be(), &prime).unwrap(),
+                validate_client_public_key(&in_range.to_bytes_be(), prime).unwrap(),
                 in_range
             );
         }
@@ -201,8 +203,8 @@ mod tests {
     /// keeps them.
     #[test]
     fn the_shared_secret_is_padded_to_the_group_size() {
-        let prime = oakley_group_2_prime();
-        let shared = derive_shared_secret(&BigUint::from(2u8), &BigUint::from(3u8), &prime);
+        let prime = &*OAKLEY_GROUP_2;
+        let shared = derive_shared_secret(&BigUint::from(2u8), &BigUint::from(3u8), prime);
         let mut expected = [0u8; GROUP_BYTES];
         expected[GROUP_BYTES - 1] = 8;
         assert_eq!(*shared, expected);
