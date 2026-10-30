@@ -27,8 +27,8 @@ pub struct Native {
     prefixes: Prefixes,
 }
 
-impl Native {
-    pub fn new() -> Self {
+impl Default for Native {
+    fn default() -> Self {
         Self {
             prefixes: Prefixes::new(vec![PREFIX.into()]).expect("one non-empty prefix"),
         }
@@ -106,16 +106,16 @@ mod tests {
             ],
         ] {
             let attributes = attributes(pairs);
-            let credential = Native::new().credential(&attributes).unwrap();
+            let credential = Native::default().credential(&attributes).unwrap();
             assert!(credential.target.starts_with(PREFIX), "{credential:?}");
-            assert_eq!(Native::new().attributes(&credential), Some(attributes));
+            assert_eq!(Native::default().attributes(&credential), Some(attributes));
         }
     }
 
     #[test]
     fn the_same_attributes_always_name_the_same_target() {
         let one = attributes(&[("service", "git"), ("username", "octo")]);
-        let target = Native::new().credential(&one).unwrap().target;
+        let target = Native::default().credential(&one).unwrap().target;
         assert_eq!(target, "credrelay:service,git;username,octo");
     }
 
@@ -124,7 +124,7 @@ mod tests {
     #[test]
     fn a_target_holds_no_equals_sign_or_colon_after_the_prefix() {
         let attributes = attributes(&[("service", "a=b:c"), ("target", "https://x/?y=z")]);
-        let target = Native::new().credential(&attributes).unwrap().target;
+        let target = Native::default().credential(&attributes).unwrap().target;
         let encoded = target.strip_prefix(PREFIX).unwrap();
         assert!(!encoded.contains(['=', ':']), "{target}");
     }
@@ -136,7 +136,7 @@ mod tests {
                 target: target.into(),
                 username: String::new(),
             };
-            assert_eq!(Native::new().attributes(&credential), None, "{target}");
+            assert_eq!(Native::default().attributes(&credential), None, "{target}");
         }
     }
 
@@ -146,6 +146,6 @@ mod tests {
             target: "gh:github.com:".into(),
             username: String::new(),
         };
-        assert_eq!(Native::new().attributes(&credential), None);
+        assert_eq!(Native::default().attributes(&credential), None);
     }
 }

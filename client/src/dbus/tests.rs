@@ -8,7 +8,7 @@ use tokio::process::{Child, Command};
 use zbus::{Connection, OwnedObjectPath, OwnedVariant, Variant};
 
 use super::*;
-use crate::keyring::tests::keyring;
+use crate::test_support::keyring;
 
 /// A secret as clients read it: one `(oayays)` argument, not four.
 type WireSecret = (OwnedObjectPath, Vec<u8>, Vec<u8>, String);

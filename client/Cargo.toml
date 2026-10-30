@@ -11,6 +11,10 @@ description.workspace = true
 name = "credrelay-client"
 path = "src/main.rs"
 
+[features]
+# `test_support`: a keyring in memory, for tests in other crates.
+test-support = ["credrelay-protocol/memory"]
+
 [dependencies]
 credrelay-protocol = { workspace = true }
 tokio = { workspace = true }

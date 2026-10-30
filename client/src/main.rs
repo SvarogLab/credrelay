@@ -1,22 +1,15 @@
-mod config;
-mod dbus;
-mod keyring;
-mod prefixes;
-mod rpc;
-mod schemes;
-mod session;
-mod spawn;
-
 use std::io::IsTerminal;
 use std::process::ExitCode;
 
 use clap::Parser;
 
-use config::Config;
-use keyring::Keyring;
-use prefixes::Prefixes;
-use rpc::Rpc;
-use spawn::Server;
+use credrelay_client::config::Config;
+use credrelay_client::dbus;
+use credrelay_client::keyring::Keyring;
+use credrelay_client::prefixes::Prefixes;
+use credrelay_client::rpc::Rpc;
+use credrelay_client::schemes;
+use credrelay_client::spawn::Server;
 
 #[tokio::main]
 async fn main() -> ExitCode {

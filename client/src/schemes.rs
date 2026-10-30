@@ -38,6 +38,6 @@ pub trait Scheme: Send + Sync {
 pub fn all(go_keyring_prefixes: Prefixes) -> Vec<Box<dyn Scheme>> {
     vec![
         Box::new(GoKeyring::new(go_keyring_prefixes)),
-        Box::new(Native::new()),
+        Box::new(Native::default()),
     ]
 }

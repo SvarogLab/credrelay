@@ -94,29 +94,9 @@ fn unexpected(reply: &Reply) -> RpcError {
 }
 
 #[cfg(test)]
-pub mod tests {
+mod tests {
     use super::*;
-    use credrelay_protocol::{MemoryStore, handle};
-
-    /// An `Rpc` whose far end answers in-process from a [`MemoryStore`], with the server's own
-    /// request handler.
-    pub fn in_memory() -> Rpc {
-        let (client, server) = tokio::io::duplex(64 * 1024);
-        let (client_reader, client_writer) = tokio::io::split(client);
-        tokio::spawn(async move {
-            let store = MemoryStore::default();
-            let (server_reader, mut server_writer) = tokio::io::split(server);
-            let mut lines = BufReader::new(server_reader).lines();
-            while let Ok(Some(line)) = lines.next_line().await {
-                let response = handle(&store, decode_line(&line).unwrap());
-                let encoded = encode_line(&response);
-                if server_writer.write_all(encoded.as_bytes()).await.is_err() {
-                    break;
-                }
-            }
-        });
-        Rpc::new(client_reader, client_writer)
-    }
+    use crate::test_support::in_memory;
 
     #[tokio::test]
     async fn every_operation_reaches_the_store() {

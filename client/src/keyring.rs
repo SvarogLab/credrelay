@@ -130,23 +130,9 @@ fn prefixes_to_list(scheme: &dyn Scheme, attributes: &Attributes) -> Vec<String>
 }
 
 #[cfg(test)]
-pub mod tests {
+mod tests {
     use super::*;
-    use crate::prefixes::Prefixes;
-    use crate::rpc::tests::in_memory;
-    use crate::schemes;
-
-    pub fn keyring() -> Keyring {
-        let go_keyring = Prefixes::new(vec!["gh:".into(), "glab:".into()]).unwrap();
-        Keyring::new(in_memory(), schemes::all(go_keyring))
-    }
-
-    pub fn attributes(pairs: &[(&str, &str)]) -> Attributes {
-        pairs
-            .iter()
-            .map(|(key, value)| (key.to_string(), value.to_string()))
-            .collect()
-    }
+    use crate::test_support::{attributes, keyring};
 
     fn gh(username: &str) -> Attributes {
         attributes(&[("service", "gh:github.com"), ("username", username)])
