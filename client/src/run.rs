@@ -27,7 +27,7 @@ pub enum RunError {
     Serve(zbus::Error),
     #[error("can't listen for a signal to stop: {0}")]
     Signal(io::Error),
-    #[error("{0}")]
+    #[error(transparent)]
     Died(Died),
     #[error("credrelay-server didn't stop: {0}")]
     Close(#[from] CloseError),
