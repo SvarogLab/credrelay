@@ -6,3 +6,5 @@ Type=dbus
 BusName=org.freedesktop.secrets
 ExecStart=@BINDIR@/credrelay-client
 Restart=on-failure
+# A client that fails at once fails again at once; a pause keeps systemd from giving up too soon.
+RestartSec=2

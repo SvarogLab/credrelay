@@ -31,6 +31,17 @@ echo "==> Building credrelay-client (release)"
 echo "==> Building credrelay-server (release, $WIN_TARGET)"
 (cd "$REPO_DIR" && cargo xwin build --release -p credrelay-server --target "$WIN_TARGET")
 
+# Windows keeps running the image of an .exe it already has open, even once the file under it is
+# replaced, so every server still running, the service's or one left over, ends before the new
+# one goes in; a client started afterwards would otherwise get an old server back.
+if systemctl --user show-environment >/dev/null 2>&1; then
+    WAS_ACTIVE="$(systemctl --user is-active credrelay.service || true)"
+    systemctl --user stop credrelay.service
+else
+    WAS_ACTIVE=inactive
+fi
+pkill -f "^/init $BIN_DIR/credrelay-server.exe" || true
+
 echo "==> Installing credrelay-client and credrelay-server.exe into $BIN_DIR (sudo)"
 sudo install -m 755 "$REPO_DIR/target/release/credrelay-client" "$BIN_DIR/credrelay-client"
 sudo install -m 755 "$REPO_DIR/target/$WIN_TARGET/release/credrelay-server.exe" "$BIN_DIR/credrelay-server.exe"
@@ -56,9 +67,12 @@ mkdir -p "$UNIT_DIR" "$DBUS_SERVICE_DIR"
 sed "s|@BINDIR@|$BIN_DIR|g" "$REPO_DIR/contrib/credrelay.service" > "$UNIT_DIR/credrelay.service"
 sed "s|@BINDIR@|$BIN_DIR|g" "$REPO_DIR/contrib/org.freedesktop.secrets.service" \
     > "$DBUS_SERVICE_DIR/org.freedesktop.secrets.service"
-systemctl --user daemon-reload
-# A running instance keeps the binary it started with until it restarts; a stopped one stays stopped.
-systemctl --user try-restart credrelay.service
+if systemctl --user show-environment >/dev/null 2>&1; then
+    systemctl --user daemon-reload
+    if [ "$WAS_ACTIVE" = active ]; then
+        systemctl --user start credrelay.service
+    fi
+fi
 
 cat <<EOF
 
