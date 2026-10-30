@@ -1,0 +1,8 @@
+[Unit]
+Description=Secret Service backed by the Windows Credential Manager
+
+[Service]
+Type=dbus
+BusName=org.freedesktop.secrets
+ExecStart=@BINDIR@/credrelay-client
+Restart=on-failure
