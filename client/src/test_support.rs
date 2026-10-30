@@ -25,7 +25,11 @@ pub fn in_memory() -> Rpc {
             }
         }
     });
-    Rpc::new(client_reader, client_writer)
+    Rpc::new(
+        client_reader,
+        client_writer,
+        std::time::Duration::from_secs(10),
+    )
 }
 
 /// A keyring in memory whose go-keyring scheme claims the services under `go_keyring_prefixes`.

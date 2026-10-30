@@ -21,6 +21,11 @@ pub struct Config {
         default_values = ["gh:", "glab:", "age:", "bao:", "kubectl:"]
     )]
     pub go_keyring_prefixes: Vec<String>,
+
+    /// How long credrelay-server may take to answer one request, in seconds. A request it doesn't
+    /// answer in time leaves the link out of step, so the client exits for systemd to restart.
+    #[arg(long, default_value_t = 10)]
+    pub request_timeout_secs: u64,
 }
 
 #[cfg(test)]
@@ -31,6 +36,7 @@ mod tests {
     fn bare_it_serves_gh_glab_and_credrelay_keyrings_services_through_the_server_on_path() {
         let config = Config::try_parse_from(["credrelay-client"]).unwrap();
         assert_eq!(config.server_exe, PathBuf::from("credrelay-server.exe"));
+        assert_eq!(config.request_timeout_secs, 10);
         assert_eq!(
             config.go_keyring_prefixes,
             ["gh:", "glab:", "age:", "bao:", "kubectl:"]

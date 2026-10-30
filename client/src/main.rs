@@ -1,5 +1,6 @@
 use std::io::IsTerminal;
 use std::process::ExitCode;
+use std::time::Duration;
 
 use clap::Parser;
 
@@ -33,8 +34,8 @@ async fn main() -> ExitCode {
     }
 }
 
-/// Serves until the server exits. There is no restarting it here: losing it means every later
-/// request would fail, so this process exits too and its supervisor starts both afresh.
+/// Serves until the server exits or the link to it breaks. There is no restarting it here: either
+/// way every later request would fail, so this process exits and its supervisor starts both afresh.
 async fn run(config: Config) -> Result<(), String> {
     let go_keyring =
         Prefixes::new(config.go_keyring_prefixes).map_err(|error| error.to_string())?;
@@ -48,10 +49,12 @@ async fn run(config: Config) -> Result<(), String> {
         let _ = tokio::io::copy(&mut server_stderr, &mut tokio::io::stderr()).await;
     });
 
-    let keyring = Keyring::new(
-        Rpc::new(server.stdout, server.stdin),
-        schemes::all(go_keyring),
+    let rpc = Rpc::new(
+        server.stdout,
+        server.stdin,
+        Duration::from_secs(config.request_timeout_secs),
     );
+    let keyring = Keyring::new(rpc.clone(), schemes::all(go_keyring));
     let builder = zbus::connection::Builder::session();
     let _connection = dbus::serve(builder, keyring)
         .await
