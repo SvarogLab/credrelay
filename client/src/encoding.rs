@@ -154,13 +154,19 @@ mod tests {
         ));
     }
 
+    /// Only a secret that can't be AES-CBC at all is rejected every time: the algorithm carries no
+    /// MAC, so a whole block of garbage decrypts to valid padding about once in 256 tries.
     #[test]
-    fn a_dh_secret_that_doesnt_decrypt_is_malformed() {
+    fn a_dh_secret_that_isnt_whole_blocks_or_has_a_short_iv_is_malformed() {
         let client_private = Key::generate_private_key().unwrap();
         let client_public = Key::generate_public_key(&client_private).unwrap();
         let (encoding, _) = Encoding::negotiate(DH_AES, client_public.as_ref()).unwrap();
         assert!(matches!(
-            encoding.decode(&[0; 16], &[1; 16]),
+            encoding.decode(&[0; 16], &[1; 15]),
+            Err(EncodingError::Malformed(_))
+        ));
+        assert!(matches!(
+            encoding.decode(&[0; 15], &[1; 16]),
             Err(EncodingError::Malformed(_))
         ));
     }
