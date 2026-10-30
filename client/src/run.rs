@@ -33,8 +33,9 @@ pub enum RunError {
     Close(#[from] CloseError),
 }
 
-/// Serves until told to stop, or until the server exits or the connection to it ends. There is no
-/// restarting the server here: every later request would fail, so this process exits and its
+/// Serves until told to stop, or until the server exits or the connection to it ends.
+///
+/// There is no restarting the server here: every later request would fail, so this process exits and its
 /// supervisor starts both afresh.
 pub async fn run(config: Config, server_args: Vec<String>) -> Result<ExitStatus, RunError> {
     let (handle, mut link) = relay::start(config.server_exe.clone(), server_args, None).await?;

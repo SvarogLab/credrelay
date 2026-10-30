@@ -6,9 +6,10 @@ mod store;
 #[cfg(windows)]
 pub use store::{Listed, MAX_SECRET_LEN, WinCred, WinCredError};
 
-/// The generic credential go-keyring keeps a secret in: `service:username`. Both the Linux
-/// service's go-keyring scheme and the Windows keyring utility name credentials with this, so
-/// each side reads what the other stored.
+/// The generic credential go-keyring keeps a secret in: `service:username`.
+///
+/// Both the Linux service's go-keyring scheme and the Windows keyring utility name credentials
+/// with this, so each side reads what the other stored.
 pub fn go_keyring_target(service: &str, username: &str) -> String {
     format!("{service}:{username}")
 }

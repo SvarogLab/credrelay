@@ -34,8 +34,8 @@ mod tests {
     use credrelay_protocol::{MemoryStore, Reply, Request, Response, decode_line, encode_line};
 
     async fn exchange(store: &Arc<MemoryStore>, request: &str) -> (io::Result<()>, String) {
-        let (mut client, server) = tokio::io::duplex(4096);
-        let served = tokio::spawn(serve_stream(store.clone(), server));
+        let (mut client, server_end) = tokio::io::duplex(4096);
+        let served = tokio::spawn(serve_stream(store.clone(), server_end));
         client.write_all(request.as_bytes()).await.unwrap();
         let mut answer = String::new();
         BufReader::new(&mut client)

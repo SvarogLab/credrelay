@@ -1,37 +1,46 @@
 use std::collections::BTreeMap;
-use std::sync::Mutex;
+use std::sync::{Mutex, MutexGuard};
 
 use crate::{Credential, CredentialStore, Failure};
 
 /// A [`CredentialStore`] that forgets everything when dropped, for tests.
 #[derive(Debug, Default)]
 pub struct MemoryStore {
-    credentials: Mutex<BTreeMap<String, (String, Vec<u8>)>>,
+    credentials: Mutex<Credentials>,
+}
+
+type Credentials = BTreeMap<String, (String, Vec<u8>)>;
+
+impl MemoryStore {
+    fn credentials(&self) -> MutexGuard<'_, Credentials> {
+        self.credentials
+            .lock()
+            .expect("no code holding the credentials panics")
+    }
 }
 
 impl CredentialStore for MemoryStore {
     fn read(&self, target: &str) -> Result<Vec<u8>, Failure> {
-        let credentials = self.credentials.lock().unwrap();
-        let (_, secret) = credentials.get(target).ok_or(Failure::NotFound)?;
-        Ok(secret.clone())
+        self.credentials()
+            .get(target)
+            .map(|(_, secret)| secret.clone())
+            .ok_or(Failure::NotFound)
     }
 
     fn write(&self, target: &str, username: &str, secret: &[u8]) -> Result<(), Failure> {
-        self.credentials
-            .lock()
-            .unwrap()
+        self.credentials()
             .insert(target.to_owned(), (username.to_owned(), secret.to_vec()));
         Ok(())
     }
 
     fn delete(&self, target: &str) -> Result<(), Failure> {
-        let removed = self.credentials.lock().unwrap().remove(target);
+        let removed = self.credentials().remove(target);
         removed.map(drop).ok_or(Failure::NotFound)
     }
 
     fn list(&self, prefix: &str) -> Result<Vec<Credential>, Failure> {
-        let credentials = self.credentials.lock().unwrap();
-        Ok(credentials
+        Ok(self
+            .credentials()
             .iter()
             .filter(|(target, _)| target.starts_with(prefix))
             .map(|(target, (username, _))| Credential {

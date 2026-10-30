@@ -22,7 +22,7 @@ pub enum Command {
     Set(Key),
     /// Deletes the secret.
     Delete(Key),
-    /// Writes a kubectl ExecCredential for the stored kubeconfig user entry; see the README.
+    /// Writes a kubectl `ExecCredential` for the stored kubeconfig user entry; see the README.
     KubeCredential(Key),
 }
 

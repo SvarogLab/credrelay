@@ -1,4 +1,6 @@
-//! A kubectl exec credential plugin. The secret is the kubeconfig `user` entry it replaces, as JSON:
+//! A kubectl exec credential plugin.
+//!
+//! The secret is the kubeconfig `user` entry it replaces, as JSON:
 //! `{"token": …}`, or `{"client-certificate-data": …, "client-key-data": …}` with base64 PEM as
 //! kubeconfig holds it, so `kubectl config view --raw -o jsonpath='{.users[?(@.name=="…")].user}'`
 //! prints exactly what to store.
@@ -72,7 +74,7 @@ enum Status {
     },
 }
 
-/// kubeconfig holds certificates and keys base64-encoded; an ExecCredential carries them as PEM.
+/// kubeconfig holds certificates and keys base64-encoded; an `ExecCredential` carries them as PEM.
 fn pem(data: &str) -> Result<String, KubeError> {
     Ok(String::from_utf8(STANDARD.decode(data)?)?)
 }
