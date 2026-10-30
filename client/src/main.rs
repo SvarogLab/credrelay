@@ -14,7 +14,7 @@ async fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    let server_args = config.server_args(&filter);
+    let server_args = filter.server_args().to_vec();
     log::init(filter);
 
     match credrelay_client::run(config, server_args).await {

@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 
 use clap::Parser;
-use librelay::client::log::LogFilter;
 
 use crate::schemes::Prefixes;
 
@@ -36,11 +35,6 @@ impl Config {
     pub fn go_keyring_prefixes(&self) -> Prefixes {
         Prefixes::new(self.go_keyring_prefix.clone())
             .expect("clap keeps at least one prefix, none of them empty")
-    }
-
-    /// The arguments credrelay-server is started with.
-    pub fn server_args(&self, filter: &LogFilter) -> Vec<String> {
-        filter.server_args().to_vec()
     }
 }
 
