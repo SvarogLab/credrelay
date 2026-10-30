@@ -118,7 +118,9 @@ credrelay-keyring kube-credential <SERVICE> [--username <NAME>]  a kubectl ExecC
 credrelay-bao-helper get|store|erase                             an OpenBao token helper
 ```
 
-The username defaults to empty. A missing secret makes `get` and `delete` exit non-zero.
+The username defaults to empty. A missing secret makes `get` and `delete` exit non-zero. A Windows
+credential holds at most 2560 bytes of secret, on either side, so a larger one is refused with an
+error saying so.
 `credrelay-bao-helper` is a binary of its own because OpenBao runs its token helper by path, with
 the operation as the only argument; it keys the token by the server address bao passes in
 `BAO_ADDR` (or `VAULT_ADDR`), as service `bao:<address>`.
@@ -200,7 +202,9 @@ kubectl config unset users.<user>.client-certificate-data
 kubectl config unset users.<user>.client-key-data
 ```
 
-Run the last three commands with the Windows `kubectl` as well, against its kubeconfig. Entries with
+The entry must fit in 2560 bytes: one with an EC client key does, while a 2048-bit RSA key with its
+certificate, base64-encoded, may not. Run the last three commands with the Windows `kubectl` as
+well, against its kubeconfig. Entries with
 a `token` work the same way (`kubectl config unset users.<user>.token`).
 
 ### OpenBao

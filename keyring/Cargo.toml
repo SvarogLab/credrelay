@@ -27,7 +27,6 @@ base64 = { workspace = true }
 oo7 = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
-credrelay-protocol = { workspace = true }
 credrelay-wincred = { workspace = true }
 
 [dev-dependencies]

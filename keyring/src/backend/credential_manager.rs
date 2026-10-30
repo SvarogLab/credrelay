@@ -1,5 +1,4 @@
-use credrelay_protocol::{CredentialStore, Failure};
-use credrelay_wincred::WinCred;
+use credrelay_wincred::{WinCred, WinCredError};
 
 use super::{Backend, BackendError};
 
@@ -20,22 +19,22 @@ impl Backend for CredentialManager {
     async fn get(&self, service: &str, username: &str) -> Result<Option<Vec<u8>>, BackendError> {
         match WinCred.read(&target(service, username)) {
             Ok(secret) => Ok(Some(secret)),
-            Err(Failure::NotFound) => Ok(None),
-            Err(failure) => Err(BackendError(failure.to_string())),
+            Err(WinCredError::NotFound) => Ok(None),
+            Err(error) => Err(BackendError(error.to_string())),
         }
     }
 
     async fn set(&self, service: &str, username: &str, secret: &[u8]) -> Result<(), BackendError> {
         WinCred
             .write(&target(service, username), username, secret)
-            .map_err(|failure| BackendError(failure.to_string()))
+            .map_err(|error| BackendError(error.to_string()))
     }
 
     async fn delete(&self, service: &str, username: &str) -> Result<bool, BackendError> {
         match WinCred.delete(&target(service, username)) {
             Ok(()) => Ok(true),
-            Err(Failure::NotFound) => Ok(false),
-            Err(failure) => Err(BackendError(failure.to_string())),
+            Err(WinCredError::NotFound) => Ok(false),
+            Err(error) => Err(BackendError(error.to_string())),
         }
     }
 }

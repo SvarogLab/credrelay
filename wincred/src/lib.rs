@@ -6,18 +6,37 @@ use std::io;
 use std::ptr;
 use std::slice;
 
-use credrelay_protocol::{Credential, CredentialStore, Failure};
 use windows_sys::Win32::Foundation::ERROR_NOT_FOUND;
 use windows_sys::Win32::Security::Credentials::{
-    CRED_PERSIST_LOCAL_MACHINE, CRED_TYPE_GENERIC, CREDENTIALW, CredDeleteW, CredEnumerateW,
-    CredFree, CredReadW, CredWriteW,
+    CRED_MAX_CREDENTIAL_BLOB_SIZE, CRED_PERSIST_LOCAL_MACHINE, CRED_TYPE_GENERIC, CREDENTIALW,
+    CredDeleteW, CredEnumerateW, CredFree, CredReadW, CredWriteW,
 };
 use windows_sys::core::{BOOL, PWSTR};
 
+/// The most a generic credential holds. Windows refuses more with an error that doesn't say why.
+pub const MAX_SECRET_LEN: usize = CRED_MAX_CREDENTIAL_BLOB_SIZE as usize;
+
+#[derive(Debug, thiserror::Error)]
+pub enum WinCredError {
+    #[error("no such credential")]
+    NotFound,
+    #[error("the secret is {len} bytes; a Windows credential holds at most {MAX_SECRET_LEN}")]
+    TooLarge { len: usize },
+    #[error(transparent)]
+    Os(#[from] io::Error),
+}
+
+/// A generic credential, as the Credential Manager lists it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Listed {
+    pub target: String,
+    pub username: String,
+}
+
 pub struct WinCred;
 
-impl CredentialStore for WinCred {
-    fn read(&self, target: &str) -> Result<Vec<u8>, Failure> {
+impl WinCred {
+    pub fn read(&self, target: &str) -> Result<Vec<u8>, WinCredError> {
         let target = wide(target);
         let mut credential: *mut CREDENTIALW = ptr::null_mut();
         // SAFETY: `target` is NUL-terminated and outlives the call; on success the API hands back
@@ -28,11 +47,13 @@ impl CredentialStore for WinCred {
         Ok(unsafe { blob(&*credential.0) }.to_vec())
     }
 
-    fn write(&self, target: &str, username: &str, secret: &[u8]) -> Result<(), Failure> {
+    pub fn write(&self, target: &str, username: &str, secret: &[u8]) -> Result<(), WinCredError> {
+        if secret.len() > MAX_SECRET_LEN {
+            return Err(WinCredError::TooLarge { len: secret.len() });
+        }
         let mut target = wide(target);
         let mut username = wide(username);
-        let blob_size = u32::try_from(secret.len())
-            .map_err(|_| Failure::Store("secret is too large".into()))?;
+        let blob_size = u32::try_from(secret.len()).expect("MAX_SECRET_LEN fits in a u32");
         let credential = CREDENTIALW {
             Type: CRED_TYPE_GENERIC,
             TargetName: target.as_mut_ptr(),
@@ -47,13 +68,13 @@ impl CredentialStore for WinCred {
         check(unsafe { CredWriteW(&credential, 0) })
     }
 
-    fn delete(&self, target: &str) -> Result<(), Failure> {
+    pub fn delete(&self, target: &str) -> Result<(), WinCredError> {
         let target = wide(target);
         // SAFETY: `target` is NUL-terminated and outlives the call.
         check(unsafe { CredDeleteW(target.as_ptr(), CRED_TYPE_GENERIC, 0) })
     }
 
-    fn list(&self, prefix: &str) -> Result<Vec<Credential>, Failure> {
+    pub fn list(&self, prefix: &str) -> Result<Vec<Listed>, WinCredError> {
         // The filter matches case-insensitively, and `*` is its own wildcard anywhere in the
         // prefix; the exact comparison below keeps only what the caller asked for.
         let filter = wide(&format!("{prefix}*"));
@@ -63,7 +84,7 @@ impl CredentialStore for WinCred {
         // one buffer holding `count` credentials, which `Owned` frees.
         match check(unsafe { CredEnumerateW(filter.as_ptr(), 0, &mut count, &mut credentials) }) {
             Ok(()) => {}
-            Err(Failure::NotFound) => return Ok(Vec::new()),
+            Err(WinCredError::NotFound) => return Ok(Vec::new()),
             Err(failure) => return Err(failure),
         }
         let credentials = Owned(credentials);
@@ -74,7 +95,7 @@ impl CredentialStore for WinCred {
             // SAFETY: each listed pointer is a valid CREDENTIALW inside the owned buffer.
             .map(|&credential| unsafe { &*credential })
             .filter(|credential| credential.Type == CRED_TYPE_GENERIC)
-            .map(|credential| Credential {
+            .map(|credential| Listed {
                 // SAFETY: TargetName and UserName are NUL-terminated or null.
                 target: unsafe { string(credential.TargetName) },
                 username: unsafe { string(credential.UserName) },
@@ -94,15 +115,15 @@ impl<T> Drop for Owned<T> {
     }
 }
 
-fn check(succeeded: BOOL) -> Result<(), Failure> {
+fn check(succeeded: BOOL) -> Result<(), WinCredError> {
     if succeeded != 0 {
         return Ok(());
     }
     let error = io::Error::last_os_error();
     if error.raw_os_error() == Some(ERROR_NOT_FOUND as i32) {
-        Err(Failure::NotFound)
+        Err(WinCredError::NotFound)
     } else {
-        Err(Failure::Store(error.to_string()))
+        Err(WinCredError::Os(error))
     }
 }
 
@@ -156,8 +177,11 @@ mod tests {
         WinCred.write(&target, "octo", b"t0ken").unwrap();
         assert_eq!(WinCred.read(&target).unwrap(), b"t0ken");
         WinCred.delete(&target).unwrap();
-        assert_eq!(WinCred.read(&target), Err(Failure::NotFound));
-        assert_eq!(WinCred.delete(&target), Err(Failure::NotFound));
+        assert!(matches!(WinCred.read(&target), Err(WinCredError::NotFound)));
+        assert!(matches!(
+            WinCred.delete(&target),
+            Err(WinCredError::NotFound)
+        ));
     }
 
     #[test]
@@ -176,11 +200,11 @@ mod tests {
         assert_eq!(
             listed,
             vec![
-                Credential {
+                Listed {
                     target: first,
                     username: String::new()
                 },
-                Credential {
+                Listed {
                     target: second,
                     username: "octo".into()
                 },
@@ -204,11 +228,23 @@ mod tests {
         assert_eq!(read.unwrap(), b"1");
         assert_eq!(
             found,
-            vec![Credential {
+            vec![Listed {
                 target: listed,
                 username: String::new()
             }]
         );
+    }
+
+    #[test]
+    fn a_secret_over_the_limit_is_refused_by_name_and_not_written() {
+        let target = target("too-large");
+        WinCred.write(&target, "", &[b'x'; MAX_SECRET_LEN]).unwrap();
+        WinCred.delete(&target).unwrap();
+        assert!(matches!(
+            WinCred.write(&target, "", &[b'x'; MAX_SECRET_LEN + 1]),
+            Err(WinCredError::TooLarge { len }) if len == MAX_SECRET_LEN + 1
+        ));
+        assert!(matches!(WinCred.read(&target), Err(WinCredError::NotFound)));
     }
 
     #[test]

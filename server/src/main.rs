@@ -1,5 +1,6 @@
 mod config;
 mod serve;
+mod store;
 
 use std::process::ExitCode;
 
@@ -33,7 +34,7 @@ async fn run() -> ExitCode {
 
     use tokio_util::compat::FuturesAsyncReadCompatExt;
 
-    let store = Arc::new(credrelay_wincred::WinCred);
+    let store = Arc::new(store::CredentialManager);
     let stdio = tokio::io::join(tokio::io::stdin(), tokio::io::stdout());
     let (mut acceptor, driver) = librelay::server::mux::server(stdio);
     tokio::spawn(async move {
