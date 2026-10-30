@@ -13,7 +13,7 @@ use credrelay_protocol::Credential;
 
 pub use go_keyring::GoKeyring;
 pub use native::{Native, PREFIX as NATIVE_PREFIX};
-pub use prefixes::{Prefixes, PrefixesError};
+pub use prefixes::Prefixes;
 
 pub type Attributes = BTreeMap<String, String>;
 

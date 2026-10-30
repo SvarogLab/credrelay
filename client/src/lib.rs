@@ -4,8 +4,12 @@
 pub mod config;
 pub mod dbus;
 mod encoding;
-pub mod keyring;
-pub mod rpc;
-pub mod schemes;
+mod keyring;
+mod rpc;
+mod run;
+mod schemes;
 #[cfg(any(test, feature = "test-support"))]
 pub mod test_support;
+
+pub use keyring::Keyring;
+pub use run::{RunError, run};
