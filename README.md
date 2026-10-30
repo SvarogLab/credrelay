@@ -8,7 +8,9 @@ store their secrets through it as they would anywhere else.
 Where an application ships for both systems and stores its secrets through a known library, the
 Linux build finds what the Windows build stored, and the other way round. Today that covers the
 applications built on [`zalando/go-keyring`](https://github.com/zalando/go-keyring), `gh` and `glab`
-among them: log in on one side, and the other side is logged in too.
+among them: log in on one side, and the other side is logged in too. For tools that keep their
+secrets in files instead, `credrelay-keyring` stores them the same way on both sides: an age key
+for sops, a kubectl client certificate, an OpenBao token.
 
 Without a Secret Service, WSL has nowhere safe to keep a token: `gh` and `glab` fall back to
 plaintext files (`~/.config/gh/hosts.yml`, `~/.config/glab-cli/config.yml`) and need a login of
@@ -28,8 +30,12 @@ their own, apart from the Windows one.
   response per line, strictly in turn, so the server can be driven by hand:
 
   ```sh
-  echo '{"op":"list","prefix":"gh:"}' | credrelay-server.exe
+  echo '{"op":"list","prefix":"gh:"}' | credrelay-server.exe --log-filter info
   ```
+
+- **`credrelay-keyring`** and **`credrelay-bao-helper`** (Linux and Windows) read and write one
+  secret under go-keyring's names: through the Secret Service on Linux, in the Credential Manager
+  directly on Windows. See [Running](#running) for what they serve.
 
 ### Schemes
 
@@ -72,48 +78,75 @@ a target out of listings when `service=` or `target=` follows its first colon (a
 
 ## Configuration
 
-`credrelay-client` needs no flags in the common case:
+### `credrelay-client`
+
+Every flag has a default, and the client runs with none under systemd:
 
 ```text
 credrelay-client
-  --server-exe <PATH>           default: "credrelay-server.exe", searched for on PATH
-  --go-keyring-prefix <PREFIX>  default: gh: and glab:; repeat it to list others, which replaces the default
+  --server-exe <PATH>             default: "credrelay-server.exe", searched for on PATH
+  --go-keyring-prefix <PREFIX>    default: gh: glab: age: bao: kubectl:; repeat it to list others,
+                                  which replaces the default
+  --request-timeout-secs <N>      default: 10
 ```
 
-`credrelay-server.exe` takes no flags: `credrelay-client` starts it, and decides which credentials
-are touched.
+`--request-timeout-secs` bounds how long the server may take to answer one request. Requests go one
+at a time and carry no ids, so a request that isn't answered in time, or that its caller abandons
+halfway, leaves the link out of step: every later call then fails at once, and the client exits for
+systemd to restart it with a fresh server.
 
-Log verbosity follows `RUST_LOG` (default `info`). The client logs to stderr, which systemd sends to
-the journal, and forwards the server's stderr there too:
+### `credrelay-server`
 
-```sh
-journalctl --user -u credrelay
+Not meant to be run by hand: the client starts it and passes every flag, and every flag is required.
+
+```text
+credrelay-server.exe
+  --log-filter <FILTER>           RUST_LOG syntax, e.g. info
 ```
 
-## Installing
+The filter is a flag rather than `RUST_LOG` because environment variables set in WSL don't reach a
+Windows process started from it.
+
+### `credrelay-keyring` and `credrelay-bao-helper`
+
+```text
+credrelay-keyring get <SERVICE> [--username <NAME>]              the secret, to stdout, as stored
+credrelay-keyring set <SERVICE> [--username <NAME>]              stdin, as read, replacing any secret
+credrelay-keyring delete <SERVICE> [--username <NAME>]
+credrelay-keyring kube-credential <SERVICE> [--username <NAME>]  a kubectl ExecCredential
+
+credrelay-bao-helper get|store|erase                             an OpenBao token helper
+```
+
+The username defaults to empty. A missing secret makes `get` and `delete` exit non-zero.
+`credrelay-bao-helper` is a binary of its own because OpenBao runs its token helper by path, with
+the operation as the only argument; it keys the token by the server address bao passes in
+`BAO_ADDR` (or `VAULT_ADDR`), as service `bao:<address>`.
+
+## Running
+
+### Running under systemd
 
 ```sh
 ./install.sh
 ```
 
-builds both binaries, installs them into `/usr/local/bin`, and installs a systemd user unit
-(`$XDG_CONFIG_HOME/systemd/user/credrelay.service`) and a D-Bus activation file
-(`$XDG_DATA_HOME/dbus-1/services/org.freedesktop.secrets.service`). The first application that asks
-for the Secret Service starts the client. It needs systemd running in WSL (`systemd=true` under
-`[boot]` in `/etc/wsl.conf`).
+builds and installs:
+
+- `credrelay-client` and `credrelay-server.exe` into `/usr/local/bin`;
+- `credrelay-keyring` and `credrelay-bao-helper` with `cargo install`;
+- their Windows builds with the Windows `cargo install`, into the Windows cargo bin directory. This
+  needs Rust installed on the Windows side;
+- a systemd user unit (`$XDG_CONFIG_HOME/systemd/user/credrelay.service`) and a D-Bus activation
+  file (`$XDG_DATA_HOME/dbus-1/services/org.freedesktop.secrets.service`).
+
+The first application that asks for the Secret Service starts the client. It needs systemd running
+in WSL (`systemd=true` under `[boot]` in `/etc/wsl.conf`). Re-running `install.sh` restarts a running
+client, so it picks up the new build; the client and the server are always installed together.
 
 Only one process can own `org.freedesktop.secrets`. If another Secret Service, gnome-keyring for one,
 runs on the same session bus, stop and disable it first; `systemctl --user status credrelay` shows
 the failure otherwise.
-
-### Prebuilt binaries
-
-Each [release](https://github.com/SvarogLab/credrelay/releases) carries the client for Linux
-(`credrelay-client-linux-amd64`, `credrelay-client-linux-arm64`, static musl builds) and the server
-for Windows (`credrelay-server-windows-amd64.exe`, `credrelay-server-windows-arm64.exe`), with their
-checksums in `SHA256SUMS`. Install them as `credrelay-client` and `credrelay-server.exe` on `PATH`,
-then copy `contrib/credrelay.service` and `contrib/org.freedesktop.secrets.service` where
-`install.sh` puts them, replacing `@BINDIR@` with the directory holding `credrelay-client`.
 
 ### Moving gh and glab onto the keyring
 
@@ -140,6 +173,62 @@ Both sides now share one credential, so **logging out on either side logs out bo
 `glab` refreshes an OAuth token under a lock in its own config directory, which is separate on each
 side: a refresh on both sides at the same moment can race, and one side then logs in again.
 
+### sops with age
+
+Store the key file once, from either side, then point sops at the keyring on both:
+
+```sh
+credrelay-keyring set age:default < ~/.config/sops/age/keys.txt
+export SOPS_AGE_KEY_CMD="credrelay-keyring get age:default"
+```
+
+On Windows, set `SOPS_AGE_KEY_CMD` to the same value as a user environment variable. sops runs the
+command itself, without a shell, and reads the keys from its output; the key file can then go.
+
+### kubectl
+
+The exec plugin hands kubectl a kubeconfig user entry kept in the keyring. Store the entry as
+kubeconfig holds it, then point the user at the plugin and drop the inline data:
+
+```sh
+kubectl config view --raw -o jsonpath='{.users[?(@.name=="<user>")].user}' \
+  | credrelay-keyring set kubectl:<user>
+kubectl config set-credentials <user> --exec-api-version=client.authentication.k8s.io/v1 \
+  --exec-command=credrelay-keyring --exec-arg=kube-credential --exec-arg=kubectl:<user> \
+  --exec-interactive-mode=Never
+kubectl config unset users.<user>.client-certificate-data
+kubectl config unset users.<user>.client-key-data
+```
+
+Run the last three commands with the Windows `kubectl` as well, against its kubeconfig. Entries with
+a `token` work the same way (`kubectl config unset users.<user>.token`).
+
+### OpenBao
+
+`credrelay-bao-helper` keeps the token in the keyring, keyed by server address. Name it as the
+token helper in `~/.bao` on Linux and `%USERPROFILE%\.bao` on Windows, by its full path:
+
+```hcl
+token_helper = "<path to credrelay-bao-helper>"
+```
+
+Both sides must reach the server under the same address (`BAO_ADDR` or `VAULT_ADDR`), since that is
+the key. bao asks the helper only when `BAO_TOKEN` and `VAULT_TOKEN` are unset. `bao login` stores
+the token through it; `bao token renew` renews the same token, so both sides keep using it.
+
+## Logging
+
+The client logs to stderr, which systemd sends to the journal; colors only on a terminal. Verbosity
+follows `RUST_LOG`, `info` when it is unset or empty; a value that doesn't parse stops the client
+before it starts the server, with the error on stderr. The client passes the same filter to the
+server as `--log-filter` and writes each line of the server's stderr to its own behind a `server:`
+prefix followed by a space, unchanged otherwise. Off a terminal the server writes no timestamps of
+its own; the journal stamps every line.
+
+```sh
+journalctl --user -u credrelay
+```
+
 ## Building
 
 The server is cross-compiled for Windows with [`cargo-xwin`](https://github.com/rust-cross/cargo-xwin);
@@ -149,11 +238,27 @@ WSL runs the `.exe` natively when it targets the host's own architecture:
 rustup target add aarch64-pc-windows-msvc
 cargo install cargo-xwin
 
-cargo build -p credrelay-client
-cargo xwin build -p credrelay-server --target aarch64-pc-windows-msvc
+cargo build -p credrelay-client -p credrelay-keyring
+cargo xwin build -p credrelay-server -p credrelay-keyring --target aarch64-pc-windows-msvc
 ```
 
 (`x86_64-pc-windows-msvc` on an x86-64 host.)
+
+### Prebuilt binaries
+
+Each [release](https://github.com/SvarogLab/credrelay/releases) carries, for `amd64` and `arm64`,
+`credrelay-client`, `credrelay-keyring` and `credrelay-bao-helper` for Linux (static musl builds,
+named `<binary>-linux-<arch>`) and `credrelay-server`, `credrelay-keyring` and `credrelay-bao-helper`
+for Windows (`<binary>-windows-<arch>.exe`), with their checksums in `SHA256SUMS`. Install them on
+`PATH` under their own names, then copy `contrib/credrelay.service` and
+`contrib/org.freedesktop.secrets.service` where `install.sh` puts them, replacing `@BINDIR@` with the
+directory holding `credrelay-client`.
+
+### Releasing
+
+Run the **Release PR** workflow from the Actions tab. It opens `chore: release vX.Y.Z` with the
+version git-cliff computes from the commits since the last tag and a regenerated `CHANGELOG.md`;
+merging it tags the commit and publishes the release.
 
 ## Testing
 
@@ -162,29 +267,24 @@ cargo test --workspace
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 ```
 
-The client's tests start a private `dbus-daemon` per test and read some replies back with `busctl`,
-so both need to be installed. They run the service against an in-memory store and drive it the way
-`go-keyring` does.
+The client's tests, and `credrelay-keyring`'s Linux test, start a private `dbus-daemon` and read
+some replies back with `busctl`, so both need to be installed. They run the service against an
+in-memory store and drive it the way `go-keyring` and oo7 do.
 
-The Credential Manager code in `credrelay-wincred` builds only for Windows. Its tests run there, against the real
-Credential Manager of whoever runs them, under target names starting with `credrelay-test`, and
-delete what they write:
+The Credential Manager code builds only for Windows. Its tests, in `credrelay-wincred` and
+`credrelay-keyring`, run there against the real Credential Manager of whoever runs them, under
+names starting with `credrelay-test`, and delete what they write:
 
 ```sh
 eval "$(cargo xwin env --target aarch64-pc-windows-msvc)"
 unset CARGO_TARGET_AARCH64_PC_WINDOWS_MSVC_RUNNER
-cargo test -p credrelay-wincred -p credrelay-server --target aarch64-pc-windows-msvc
-cargo clippy -p credrelay-wincred -p credrelay-server --all-targets --target aarch64-pc-windows-msvc
+cargo test -p credrelay-wincred -p credrelay-server -p credrelay-keyring --target aarch64-pc-windows-msvc
+cargo clippy -p credrelay-wincred -p credrelay-server -p credrelay-keyring --all-targets \
+  --target aarch64-pc-windows-msvc
 ```
 
 `cargo xwin test` would set `CARGO_TARGET_AARCH64_PC_WINDOWS_MSVC_RUNNER=wine`; WSL runs the test
 binary itself, so the runner is unset and plain `cargo test` used instead.
-
-### Releasing
-
-Run the **Release PR** workflow from the Actions tab. It opens `chore: release vX.Y.Z` with the
-version git-cliff computes from the commits since the last tag and a regenerated `CHANGELOG.md`;
-merging it tags the commit and publishes the release.
 
 ## Security notes
 
@@ -196,7 +296,7 @@ merging it tags the commit and publishes the release.
 - Credentials are written with local-machine persistence, as go-keyring writes them: they stay on
   this machine and don't roam with the Windows profile.
 - A `plain` session sends secrets over the session bus unencrypted, as the specification allows; a
-  client that asks for the DH session gets them encrypted.
+  client that asks for the DH session gets them encrypted. `credrelay-keyring` asks for DH.
 
 ## License
 
