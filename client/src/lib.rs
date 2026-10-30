@@ -7,6 +7,7 @@ pub mod keyring;
 pub mod prefixes;
 pub mod rpc;
 pub mod schemes;
+pub mod server_log;
 mod session;
 pub mod spawn;
 #[cfg(any(test, feature = "test-support"))]

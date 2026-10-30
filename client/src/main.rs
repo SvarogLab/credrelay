@@ -10,6 +10,7 @@ use credrelay_client::keyring::Keyring;
 use credrelay_client::prefixes::Prefixes;
 use credrelay_client::rpc::Rpc;
 use credrelay_client::schemes;
+use credrelay_client::server_log;
 use credrelay_client::spawn::Server;
 
 #[tokio::main]
@@ -39,15 +40,12 @@ async fn main() -> ExitCode {
 async fn run(config: Config) -> Result<(), String> {
     let go_keyring =
         Prefixes::new(config.go_keyring_prefixes).map_err(|error| error.to_string())?;
-    let mut server = Server::spawn(config.server_exe)
+    let log_filter = server_log::filter(std::env::var("RUST_LOG").ok());
+    let mut server = Server::spawn(config.server_exe, vec!["--log-filter".into(), log_filter])
         .await
         .map_err(|error| error.to_string())?;
 
-    // The server's diagnostics end up wherever this process's do.
-    let mut server_stderr = server.stderr;
-    tokio::spawn(async move {
-        let _ = tokio::io::copy(&mut server_stderr, &mut tokio::io::stderr()).await;
-    });
+    tokio::spawn(server_log::forward(server.stderr, tokio::io::stderr()));
 
     let rpc = Rpc::new(
         server.stdout,

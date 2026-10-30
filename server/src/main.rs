@@ -9,13 +9,26 @@ use clap::Parser;
 use config::Config;
 
 fn main() -> ExitCode {
-    // stdout carries the protocol, so diagnostics go to stderr, which the client forwards.
-    tracing_subscriber::fmt()
+    let config = Config::parse();
+    let filter = match tracing_subscriber::EnvFilter::try_new(&config.log_filter) {
+        Ok(filter) => filter,
+        Err(error) => {
+            eprintln!("credrelay-server: invalid --log-filter: {error}");
+            return ExitCode::FAILURE;
+        }
+    };
+    // stdout carries the protocol, so diagnostics go to stderr, which the client forwards. There
+    // the client or the journal stamps each line, so the server adds a time only on a terminal.
+    let on_terminal = std::io::stderr().is_terminal();
+    let logs = tracing_subscriber::fmt()
         .with_writer(std::io::stderr)
-        .with_ansi(std::io::stderr().is_terminal())
-        .init();
-
-    Config::parse();
+        .with_ansi(on_terminal)
+        .with_env_filter(filter);
+    if on_terminal {
+        logs.init();
+    } else {
+        logs.without_time().init();
+    }
 
     #[cfg(windows)]
     {
