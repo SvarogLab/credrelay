@@ -50,15 +50,15 @@ impl Scheme for GoKeyring {
     }
 
     fn attributes(&self, credential: &Credential) -> Option<Attributes> {
-        if !self.prefixes.covers(&credential.target) {
-            return None;
-        }
         // go-keyring stores the username on its own too, which is what tells apart where the
         // service ends in a target that may hold colons on either side.
         let service = credential
             .target
             .strip_suffix(credential.username.as_str())?
             .strip_suffix(':')?;
+        if !self.prefixes.covers(service) {
+            return None;
+        }
         Some(Attributes::from([
             (SERVICE.to_owned(), service.to_owned()),
             (USERNAME.to_owned(), credential.username.clone()),
@@ -141,6 +141,11 @@ mod tests {
             scheme().attributes(&credential("octo.gh:github.com", "octo")),
             None
         );
+    }
+
+    #[test]
+    fn a_credential_named_only_by_a_prefix_isnt_go_keyrings() {
+        assert_eq!(scheme().attributes(&credential("gh:", "")), None);
     }
 
     #[test]
