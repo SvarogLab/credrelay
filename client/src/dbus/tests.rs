@@ -8,7 +8,7 @@ use tokio::process::{Child, Command};
 use zbus::{Connection, OwnedObjectPath, OwnedVariant, Variant};
 
 use super::*;
-use crate::test_support::keyring;
+use crate::test_support::{attributes, keyring};
 
 /// A secret as clients read it: one `(oayays)` argument, not four.
 type WireSecret = (OwnedObjectPath, Vec<u8>, Vec<u8>, String);
@@ -60,10 +60,14 @@ struct Fixture {
 
 impl Fixture {
     async fn start() -> Self {
+        Self::start_with(keyring()).await
+    }
+
+    async fn start_with(keyring: Keyring) -> Self {
         let bus = Bus::start().await;
         let service = serve(
             zbus::connection::Builder::address(bus.address.as_str()),
-            keyring(),
+            keyring,
         )
         .await
         .unwrap();
@@ -436,6 +440,63 @@ async fn the_collection_lists_its_items_and_they_answer() {
     assert!(all.contains_key("Items"));
     let locked: bool = fixture.property(item.as_str(), ITEM, "Locked").await;
     assert!(!locked);
+}
+
+/// Items stored from the Windows side are exported by nothing but the read of `Items` that finds
+/// them, and a client uses the paths it gets as soon as the reply arrives.
+#[tokio::test(flavor = "multi_thread")]
+async fn every_item_the_collection_lists_answers_at_once() {
+    let keyring = keyring();
+    for i in 0..200 {
+        let username = format!("user{i}");
+        keyring
+            .store(
+                &attributes(&[("service", "gh:github.com"), ("username", &username)]),
+                b"t0ken",
+            )
+            .await
+            .unwrap();
+    }
+    let fixture = Fixture::start_with(keyring).await;
+    let items: Vec<OwnedObjectPath> = fixture.property(LOGIN_PATH, COLLECTION, "Items").await;
+    assert_eq!(items.len(), 200);
+    let last = items.last().unwrap();
+    let locked: zbus::Result<OwnedVariant> = fixture
+        .call(
+            last.as_str(),
+            "org.freedesktop.DBus.Properties",
+            "Get",
+            &(ITEM, "Locked"),
+        )
+        .await;
+    assert!(locked.is_ok(), "{last}: {locked:?}");
+}
+
+/// A credential written on the Windows side while the service runs is exported by the read of
+/// `Items` that finds it, and listed by the next one; no read lists it before it answers.
+#[tokio::test(flavor = "multi_thread")]
+async fn an_item_stored_from_windows_is_listed_once_it_answers() {
+    let rpc = crate::test_support::in_memory();
+    let prefixes = crate::schemes::Prefixes::new(vec!["gh:".into()]).unwrap();
+    let fixture =
+        Fixture::start_with(Keyring::new(rpc.clone(), crate::schemes::all(prefixes))).await;
+    rpc.write("gh:github.com:octo", "octo", b"t0ken")
+        .await
+        .unwrap();
+    let mut listed = Vec::new();
+    for _ in 0..100 {
+        listed = fixture
+            .property::<Vec<OwnedObjectPath>>(LOGIN_PATH, COLLECTION, "Items")
+            .await;
+        for path in &listed {
+            let _: bool = fixture.property(path.as_str(), ITEM, "Locked").await;
+        }
+        if !listed.is_empty() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    assert_eq!(listed, vec![item::path("gh:github.com:octo")]);
 }
 
 #[tokio::test]

@@ -8,7 +8,7 @@ mod item;
 mod service;
 mod session;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
@@ -41,16 +41,15 @@ pub async fn serve(
         keyring,
         sessions: Mutex::default(),
         next_session: AtomicU64::new(0),
+        exported: Mutex::default(),
     });
     let connection = builder
         .serve_at(SERVICE_PATH, service::Service::new(state.clone()))
         .serve_at(LOGIN_PATH, collection::Collection::new(state.clone()))
-        .serve_at(DEFAULT_ALIAS_PATH, collection::Collection::new(state.clone()))
-        // zbus would otherwise take the name from an instance already serving, and let the next
-        // one take it from this.
-        .replace_existing_names(false)
-        .allow_name_replacements(false)
-        .name(BUS_NAME)
+        .serve_at(
+            DEFAULT_ALIAS_PATH,
+            collection::Collection::new(state.clone()),
+        )
         .build()
         .await?;
     let departures = zbus::fdo::DBusProxy::new(&connection)
@@ -59,9 +58,21 @@ pub async fn serve(
         .await?;
     let watcher = tokio::spawn(close_sessions_of_departed(
         departures,
-        state,
+        state.clone(),
         connection.clone(),
     ));
+    // `Items` lists only exported items, so what the store already holds is exported before any
+    // client can ask.
+    if let Err(error) = state
+        .search(connection.object_server(), &Attributes::new())
+        .await
+    {
+        tracing::warn!(%error, "can't export the items already stored");
+    }
+    // Neither replacing an instance already serving nor letting the next one replace this.
+    connection
+        .request_name_with_flags(BUS_NAME, zbus::fdo::RequestNameFlags::DO_NOT_QUEUE)
+        .await?;
     Ok(Serving {
         connection,
         watcher,
@@ -128,6 +139,9 @@ struct State {
     keyring: Keyring,
     sessions: Mutex<HashMap<OwnedObjectPath, Session>>,
     next_session: AtomicU64,
+    /// The paths of the items exported, which a property getter can't learn from the object
+    /// server: the getter already holds the object tree's lock.
+    exported: Mutex<HashSet<OwnedObjectPath>>,
 }
 
 impl State {
@@ -135,6 +149,12 @@ impl State {
         self.sessions
             .lock()
             .expect("no code holding the sessions panics")
+    }
+
+    fn exported(&self) -> MutexGuard<'_, HashSet<OwnedObjectPath>> {
+        self.exported
+            .lock()
+            .expect("no code holding the exported items panics")
     }
 
     fn encoding(&self, session: &OwnedObjectPath) -> Result<Arc<Encoding>, Error> {
@@ -176,6 +196,7 @@ impl State {
                 item::ItemObject::new(self.clone(), found, path.clone()),
             )
             .await?;
+        self.exported().insert(path.clone());
         Ok(path)
     }
 

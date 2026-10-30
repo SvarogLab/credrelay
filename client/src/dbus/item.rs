@@ -51,6 +51,7 @@ impl ItemObject {
         #[zbus(connection)] connection: &Connection,
     ) -> Result<OwnedObjectPath, Error> {
         self.state.keyring.delete(&self.item).await?;
+        self.state.exported().remove(&self.path);
         unexport::<Self>(connection, self.path.clone());
         Ok(OwnedObjectPath::try_from(NO_PROMPT)?)
     }

@@ -57,30 +57,30 @@ impl Collection {
     }
 
     /// zbus holds the object tree's read lock while a property getter runs, and exporting an
-    /// object takes its write lock, so the items found are exported once the getter has returned.
+    /// object takes its write lock, so an item this finds unexported is exported once the getter
+    /// has returned and listed from the next read on: a path listed before its object exists would
+    /// fail the client that uses it straight away.
     #[zbus(property)]
     async fn items(
         &self,
         #[zbus(connection)] connection: &Connection,
-    ) -> Result<Vec<OwnedObjectPath>, zbus::fdo::Error> {
-        let found = self
-            .state
-            .keyring
-            .search(&Attributes::new())
-            .await
-            .map_err(|error| zbus::fdo::Error::Failed(error.to_string()))?;
-        let paths = found
-            .iter()
-            .map(|found| item::path(&found.target))
-            .collect();
+    ) -> Result<Vec<OwnedObjectPath>, Error> {
+        let found = self.state.keyring.search(&Attributes::new()).await?;
+        let (listed, unexported): (Vec<_>, Vec<_>) = {
+            let exported = self.state.exported();
+            found
+                .into_iter()
+                .map(|found| (item::path(&found.target), found))
+                .partition(|(path, _)| exported.contains(path))
+        };
         let state = self.state.clone();
         let connection = connection.clone();
         tokio::spawn(async move {
-            for found in found {
+            for (_, found) in unexported {
                 let _ = state.export(connection.object_server(), found).await;
             }
         });
-        Ok(paths)
+        Ok(listed.into_iter().map(|(path, _)| path).collect())
     }
 
     #[zbus(property)]
