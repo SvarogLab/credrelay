@@ -2,9 +2,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use zbus::object_server::ObjectServer;
-use zbus::{OwnedObjectPath, OwnedVariant, interface};
+use zbus::{Connection, OwnedObjectPath, OwnedVariant, interface};
 
-use super::{Error, NO_PROMPT, Secret, State};
+use super::{Error, NO_PROMPT, Secret, State, item};
 use crate::schemes::Attributes;
 
 const ATTRIBUTES_PROPERTY: &str = "org.freedesktop.Secret.Item.Attributes";
@@ -56,15 +56,31 @@ impl Collection {
         Ok((path, OwnedObjectPath::try_from(NO_PROMPT)?))
     }
 
+    /// zbus holds the object tree's read lock while a property getter runs, and exporting an
+    /// object takes its write lock, so the items found are exported once the getter has returned.
     #[zbus(property)]
     async fn items(
         &self,
-        #[zbus(object_server)] server: &ObjectServer,
+        #[zbus(connection)] connection: &Connection,
     ) -> Result<Vec<OwnedObjectPath>, zbus::fdo::Error> {
-        self.state
-            .search(server, &Attributes::new())
+        let found = self
+            .state
+            .keyring
+            .search(&Attributes::new())
             .await
-            .map_err(|error| zbus::fdo::Error::Failed(error.to_string()))
+            .map_err(|error| zbus::fdo::Error::Failed(error.to_string()))?;
+        let paths = found
+            .iter()
+            .map(|found| item::path(&found.target))
+            .collect();
+        let state = self.state.clone();
+        let connection = connection.clone();
+        tokio::spawn(async move {
+            for found in found {
+                let _ = state.export(connection.object_server(), found).await;
+            }
+        });
+        Ok(paths)
     }
 
     #[zbus(property)]

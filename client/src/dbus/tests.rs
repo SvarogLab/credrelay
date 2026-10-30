@@ -379,6 +379,28 @@ async fn the_default_alias_is_the_login_collection() {
     assert_eq!(found.len(), 1);
 }
 
+/// oo7 reads every collection property when it opens one; listing the items mustn't block the
+/// service, nor leave paths behind that nothing answers on.
+#[tokio::test]
+async fn the_collection_lists_its_items_and_they_answer() {
+    let fixture = Fixture::start().await;
+    let item = fixture.set("gh:github.com", "octo", "t0ken").await.unwrap();
+    let items: Vec<OwnedObjectPath> = fixture.property(LOGIN_PATH, COLLECTION, "Items").await;
+    assert_eq!(items, vec![item.clone()]);
+    let all: HashMap<String, OwnedVariant> = fixture
+        .call(
+            LOGIN_PATH,
+            "org.freedesktop.DBus.Properties",
+            "GetAll",
+            &(COLLECTION,),
+        )
+        .await
+        .unwrap();
+    assert!(all.contains_key("Items"));
+    let locked: bool = fixture.property(item.as_str(), ITEM, "Locked").await;
+    assert!(!locked);
+}
+
 #[tokio::test]
 async fn an_item_shows_its_attributes() {
     let fixture = Fixture::start().await;
