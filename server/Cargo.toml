@@ -18,7 +18,7 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { workspace = true }
+credrelay-wincred = { workspace = true }
 
 [dev-dependencies]
 credrelay-protocol = { workspace = true, features = ["memory"] }

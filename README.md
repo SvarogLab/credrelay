@@ -54,7 +54,7 @@ attributes happen to spell out someone else's target name lands under `credrelay
 
 The `credrelay:` encoding leaves no `=` or `:` after the prefix because the Credential Manager leaves
 a target out of listings when `service=` or `target=` follows its first colon (a test in
-`server/src/wincred.rs` holds this).
+`wincred/src/lib.rs` holds this).
 
 ### What the service implements
 
@@ -166,15 +166,15 @@ The client's tests start a private `dbus-daemon` per test and read some replies 
 so both need to be installed. They run the service against an in-memory store and drive it the way
 `go-keyring` does.
 
-The server's Credential Manager code builds only for Windows. Its tests run there, against the real
+The Credential Manager code in `credrelay-wincred` builds only for Windows. Its tests run there, against the real
 Credential Manager of whoever runs them, under target names starting with `credrelay-test`, and
 delete what they write:
 
 ```sh
 eval "$(cargo xwin env --target aarch64-pc-windows-msvc)"
 unset CARGO_TARGET_AARCH64_PC_WINDOWS_MSVC_RUNNER
-cargo test -p credrelay-server --target aarch64-pc-windows-msvc
-cargo clippy -p credrelay-server --all-targets --target aarch64-pc-windows-msvc
+cargo test -p credrelay-wincred -p credrelay-server --target aarch64-pc-windows-msvc
+cargo clippy -p credrelay-wincred -p credrelay-server --all-targets --target aarch64-pc-windows-msvc
 ```
 
 `cargo xwin test` would set `CARGO_TARGET_AARCH64_PC_WINDOWS_MSVC_RUNNER=wine`; WSL runs the test

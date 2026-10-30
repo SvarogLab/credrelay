@@ -1,6 +1,5 @@
 mod config;
 mod serve;
-mod wincred;
 
 use std::io::IsTerminal;
 use std::process::ExitCode;
@@ -23,7 +22,7 @@ fn main() -> ExitCode {
         // The client's end of stdin closing is how this process learns the client is gone:
         // WSL doesn't end a Windows process along with the Linux process that spawned it.
         match serve::serve(
-            &wincred::WinCred,
+            &credrelay_wincred::WinCred,
             std::io::stdin().lock(),
             std::io::stdout().lock(),
         ) {

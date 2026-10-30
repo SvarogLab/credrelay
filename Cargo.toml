@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["protocol", "client", "server"]
+members = ["protocol", "wincred", "client", "server"]
 
 [workspace.package]
 version = "0.1.0"
@@ -12,6 +12,7 @@ description = "Serves the freedesktop Secret Service on WSL from the Windows Cre
 
 [workspace.dependencies]
 credrelay-protocol = { path = "protocol" }
+credrelay-wincred = { path = "wincred" }
 tokio = { version = "1.54", features = ["full"] }
 zbus = { version = "6.2", default-features = false, features = ["tokio", "service", "proxy"] }
 serde = { version = "1.0.229", features = ["derive"] }

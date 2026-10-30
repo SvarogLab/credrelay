@@ -22,7 +22,7 @@ jobs:
       build-args: -p credrelay-client
       # The client's tests run the service on a private bus and read replies back with busctl.
       apt-packages: dbus-daemon systemd
-      windows-args: -p credrelay-server
+      windows-args: -p credrelay-wincred -p credrelay-server
       windows-binaries: credrelay-server
 
   tag:
