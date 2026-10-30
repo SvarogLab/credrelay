@@ -3,10 +3,9 @@
 
 pub mod config;
 pub mod dbus;
+mod encoding;
 pub mod keyring;
-pub mod prefixes;
 pub mod rpc;
 pub mod schemes;
-mod session;
 #[cfg(any(test, feature = "test-support"))]
 pub mod test_support;

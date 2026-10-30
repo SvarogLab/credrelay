@@ -27,11 +27,13 @@ const IV_BYTES: usize = 16;
 
 type AesKey = Zeroizing<[u8; 16]>;
 #[derive(Debug, thiserror::Error)]
-pub enum SessionError {
+pub enum EncodingError {
     #[error("unsupported algorithm {0:?}")]
     Unsupported(String),
     #[error("malformed session parameters: {0}")]
     Malformed(String),
+    #[error("no randomness for a key or IV: {0}")]
+    Random(String),
 }
 
 /// How secrets cross the bus in one session.
@@ -43,7 +45,7 @@ pub enum Encoding {
 impl Encoding {
     /// Negotiates `algorithm` against the client's `input`, returning the encoding and the
     /// output `OpenSession` hands back: nothing for plain, the service's public key for DH.
-    pub fn negotiate(algorithm: &str, input: &[u8]) -> Result<(Self, Vec<u8>), SessionError> {
+    pub fn negotiate(algorithm: &str, input: &[u8]) -> Result<(Self, Vec<u8>), EncodingError> {
         match algorithm {
             PLAIN => Ok((Self::Plain, Vec::new())),
             DH_AES => {
@@ -51,13 +53,13 @@ impl Encoding {
                     .expect("the group prime is valid hex");
                 let client_public = BigUint::from_bytes_be(input);
                 if client_public <= BigUint::from(1u8) || client_public >= &prime - 1u8 {
-                    return Err(SessionError::Malformed(
+                    return Err(EncodingError::Malformed(
                         "client public key out of range".into(),
                     ));
                 }
                 let mut private_bytes = Zeroizing::new([0u8; GROUP_BYTES]);
                 getrandom::fill(private_bytes.as_mut_slice())
-                    .map_err(|error| SessionError::Malformed(error.to_string()))?;
+                    .map_err(|error| EncodingError::Random(error.to_string()))?;
                 let private = BigUint::from_bytes_be(private_bytes.as_slice());
                 let public = BigUint::from(2u8).modpow(&private, &prime);
                 let shared = Zeroizing::new(client_public.modpow(&private, &prime).to_bytes_be());
@@ -70,18 +72,18 @@ impl Encoding {
                     .expect("16 bytes is a valid HKDF-SHA256 output length");
                 Ok((Self::Aes(key), public.to_bytes_be()))
             }
-            other => Err(SessionError::Unsupported(other.to_owned())),
+            other => Err(EncodingError::Unsupported(other.to_owned())),
         }
     }
 
     /// Returns `(parameters, value)` as a `Secret` struct carries them.
-    pub fn encode(&self, secret: &[u8]) -> Result<(Vec<u8>, Vec<u8>), SessionError> {
+    pub fn encode(&self, secret: &[u8]) -> Result<(Vec<u8>, Vec<u8>), EncodingError> {
         match self {
             Self::Plain => Ok((Vec::new(), secret.to_vec())),
             Self::Aes(key) => {
                 let mut iv = [0u8; IV_BYTES];
                 getrandom::fill(&mut iv)
-                    .map_err(|error| SessionError::Malformed(error.to_string()))?;
+                    .map_err(|error| EncodingError::Random(error.to_string()))?;
                 let value = cbc::Encryptor::<Aes128>::new_from_slices(key.as_slice(), &iv)
                     .expect("AES-128-CBC takes a 16-byte key and IV")
                     .encrypt_padded_vec::<Pkcs7>(secret);
@@ -90,17 +92,17 @@ impl Encoding {
         }
     }
 
-    pub fn decode(&self, parameters: &[u8], value: &[u8]) -> Result<Vec<u8>, SessionError> {
+    pub fn decode(&self, parameters: &[u8], value: &[u8]) -> Result<Vec<u8>, EncodingError> {
         match self {
             Self::Plain => Ok(value.to_vec()),
             Self::Aes(key) => {
                 let iv: [u8; IV_BYTES] = parameters
                     .try_into()
-                    .map_err(|_| SessionError::Malformed("the IV is not 16 bytes".into()))?;
+                    .map_err(|_| EncodingError::Malformed("the IV is not 16 bytes".into()))?;
                 cbc::Decryptor::<Aes128>::new_from_slices(key.as_slice(), &iv)
                     .expect("AES-128-CBC takes a 16-byte key and IV")
                     .decrypt_padded_vec::<Pkcs7>(value)
-                    .map_err(|error| SessionError::Malformed(error.to_string()))
+                    .map_err(|error| EncodingError::Malformed(error.to_string()))
             }
         }
     }
@@ -148,7 +150,7 @@ mod tests {
     fn an_unknown_algorithm_is_unsupported() {
         assert!(matches!(
             Encoding::negotiate("dh-ietf2048-sha512", &[]),
-            Err(SessionError::Unsupported(_))
+            Err(EncodingError::Unsupported(_))
         ));
     }
 
@@ -159,7 +161,7 @@ mod tests {
         let (encoding, _) = Encoding::negotiate(DH_AES, client_public.as_ref()).unwrap();
         assert!(matches!(
             encoding.decode(&[0; 16], &[1; 16]),
-            Err(SessionError::Malformed(_))
+            Err(EncodingError::Malformed(_))
         ));
     }
 }

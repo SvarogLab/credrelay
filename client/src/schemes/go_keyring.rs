@@ -10,7 +10,7 @@ use credrelay_protocol::Credential;
 use credrelay_wincred::go_keyring_target;
 
 use super::{Attributes, Scheme};
-use crate::prefixes::Prefixes;
+use crate::schemes::Prefixes;
 
 const SERVICE: &str = "service";
 const USERNAME: &str = "username";

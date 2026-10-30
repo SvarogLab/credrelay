@@ -16,9 +16,9 @@ use serde::{Deserialize, Serialize};
 use zbus::object_server::ObjectServer;
 use zbus::{OwnedObjectPath, Type};
 
+use crate::encoding::{Encoding, EncodingError};
 use crate::keyring::{Item, Keyring, KeyringError};
 use crate::schemes::Attributes;
-use crate::session::{Encoding, SessionError};
 
 pub const BUS_NAME: &str = "org.freedesktop.secrets";
 pub const SERVICE_PATH: &str = "/org/freedesktop/secrets";
@@ -163,12 +163,13 @@ impl From<KeyringError> for Error {
     }
 }
 
-impl From<SessionError> for Error {
-    fn from(error: SessionError) -> Self {
+impl From<EncodingError> for Error {
+    fn from(error: EncodingError) -> Self {
         let message = error.to_string();
         match error {
-            SessionError::Unsupported(_) => Self::NotSupported(message),
-            SessionError::Malformed(_) => Self::InvalidArgs(message),
+            EncodingError::Unsupported(_) => Self::NotSupported(message),
+            EncodingError::Malformed(_) => Self::InvalidArgs(message),
+            EncodingError::Random(_) => Self::Failed(message),
         }
     }
 }

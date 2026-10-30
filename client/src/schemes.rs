@@ -5,6 +5,7 @@
 
 mod go_keyring;
 mod native;
+mod prefixes;
 
 use std::collections::BTreeMap;
 
@@ -12,8 +13,7 @@ use credrelay_protocol::Credential;
 
 pub use go_keyring::GoKeyring;
 pub use native::Native;
-
-use crate::prefixes::Prefixes;
+pub use prefixes::{Prefixes, PrefixesError};
 
 pub type Attributes = BTreeMap<String, String>;
 

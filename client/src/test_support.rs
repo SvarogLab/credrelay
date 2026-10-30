@@ -7,8 +7,8 @@ use credrelay_protocol::{MemoryStore, answer};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
 use crate::keyring::Keyring;
-use crate::prefixes::Prefixes;
 use crate::rpc::Rpc;
+use crate::schemes::Prefixes;
 use crate::schemes::{self, Attributes};
 
 /// An `Rpc` whose every stream is answered in-process from one [`MemoryStore`], with the server's

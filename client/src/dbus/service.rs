@@ -6,8 +6,8 @@ use zbus::{OwnedObjectPath, OwnedVariant, Variant, interface};
 
 use super::session::SessionObject;
 use super::{Error, LOGIN_PATH, NO_PROMPT, Secret, State, item};
+use crate::encoding::{self, Encoding};
 use crate::schemes::Attributes;
-use crate::session::{self, Encoding};
 
 pub struct Service {
     state: Arc<State>,
@@ -28,7 +28,7 @@ impl Service {
         #[zbus(object_server)] server: &ObjectServer,
     ) -> Result<(OwnedVariant, OwnedObjectPath), Error> {
         let input = match algorithm {
-            session::PLAIN => Vec::new(),
+            encoding::PLAIN => Vec::new(),
             _ => {
                 Vec::<u8>::try_from(input).map_err(|error| Error::InvalidArgs(error.to_string()))?
             }

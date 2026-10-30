@@ -453,7 +453,7 @@ async fn a_dh_session_sends_and_receives_encrypted_secrets() {
             SERVICE,
             "OpenSession",
             &(
-                crate::session::DH_AES,
+                crate::encoding::DH_AES,
                 Variant::from(public.as_ref().to_vec()),
             ),
         )

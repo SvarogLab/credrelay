@@ -12,7 +12,7 @@ use credrelay_protocol::Credential;
 use percent_encoding::{AsciiSet, NON_ALPHANUMERIC, percent_decode_str, utf8_percent_encode};
 
 use super::{Attributes, Scheme};
-use crate::prefixes::Prefixes;
+use crate::schemes::Prefixes;
 
 const PREFIX: &str = "credrelay:";
 const PAIRS: char = ';';
