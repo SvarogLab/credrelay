@@ -3,9 +3,8 @@ use std::sync::Arc;
 
 use zbus::message::Header;
 use zbus::object_server::ObjectServer;
-use zbus::{OwnedObjectPath, OwnedVariant, Variant, interface};
+use zbus::{Connection, OwnedObjectPath, OwnedVariant, Variant, interface};
 
-use super::session::SessionObject;
 use super::{Error, LOGIN_PATH, NO_PROMPT, Secret, Session, State, item};
 use crate::encoding::{self, Encoding};
 use crate::schemes::Attributes;
@@ -26,7 +25,7 @@ impl Service {
         &self,
         algorithm: &str,
         input: OwnedVariant,
-        #[zbus(object_server)] server: &ObjectServer,
+        #[zbus(connection)] connection: &Connection,
         #[zbus(header)] header: Header<'_>,
     ) -> Result<(OwnedVariant, OwnedObjectPath), Error> {
         let owner = header
@@ -45,15 +44,12 @@ impl Service {
             Encoding::Aes(_) => OwnedVariant::try_from(Variant::from(output)),
         }?;
         let path = self.state.new_session_path();
-        self.state.sessions().insert(
-            path.clone(),
-            Session {
-                encoding: Arc::new(encoding),
-                owner,
-            },
-        );
-        server
-            .at(&path, SessionObject::new(self.state.clone(), path.clone()))
+        let session = Session {
+            encoding: Arc::new(encoding),
+            owner,
+        };
+        self.state
+            .record_session(connection, path.clone(), session)
             .await?;
         Ok((output, path))
     }

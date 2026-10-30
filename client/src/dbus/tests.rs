@@ -612,6 +612,72 @@ async fn a_disconnected_clients_sessions_are_dropped() {
     }
 }
 
+/// A client can leave the bus while its `OpenSession` is still being handled, and the watcher may
+/// see it go before the session is recorded: what is recorded for an owner already gone is dropped.
+#[tokio::test]
+async fn a_session_recorded_after_its_client_left_is_dropped() {
+    let bus = Bus::start().await;
+    let connection = bus.connect().await;
+    let state = State::new(keyring());
+
+    let path = state.new_session_path();
+    let departed = Session {
+        encoding: Arc::new(Encoding::Plain),
+        owner: ":1.4242".into(),
+    };
+    assert!(
+        state
+            .record_session(&connection, path.clone(), departed)
+            .await
+            .is_err()
+    );
+    assert!(state.sessions().is_empty());
+    let object = connection
+        .object_server()
+        .interface::<_, session::SessionObject>(&path)
+        .await;
+    assert!(object.is_err(), "the session's object is still exported");
+
+    let present = Session {
+        encoding: Arc::new(Encoding::Plain),
+        owner: connection.unique_name().unwrap().to_string(),
+    };
+    state
+        .record_session(&connection, path.clone(), present)
+        .await
+        .unwrap();
+    assert!(state.sessions().contains_key(&path));
+}
+
+/// A session whose owner can't be checked is dropped too, rather than left for a departure the
+/// watcher may already have handled.
+#[tokio::test]
+async fn a_session_whose_owner_cant_be_checked_is_dropped() {
+    let bus = Bus::start().await;
+    let connection = bus.connect().await;
+    let owner = connection.unique_name().unwrap().to_string();
+    drop(bus);
+    let state = State::new(keyring());
+
+    let path = state.new_session_path();
+    let session = Session {
+        encoding: Arc::new(Encoding::Plain),
+        owner,
+    };
+    assert!(
+        state
+            .record_session(&connection, path.clone(), session)
+            .await
+            .is_err()
+    );
+    assert!(state.sessions().is_empty());
+    let object = connection
+        .object_server()
+        .interface::<_, session::SessionObject>(&path)
+        .await;
+    assert!(object.is_err(), "the session's object is still exported");
+}
+
 #[tokio::test]
 async fn a_secret_for_a_closed_session_is_refused() {
     let fixture = Fixture::start().await;

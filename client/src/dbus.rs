@@ -37,12 +37,7 @@ pub async fn serve(
     builder: zbus::connection::Builder<'_>,
     keyring: Keyring,
 ) -> zbus::Result<Serving> {
-    let state = Arc::new(State {
-        keyring,
-        sessions: Mutex::default(),
-        next_session: AtomicU64::new(0),
-        exported: Mutex::default(),
-    });
+    let state = State::new(keyring);
     let connection = builder
         .serve_at(SERVICE_PATH, service::Service::new(state.clone()))
         .serve_at(LOGIN_PATH, collection::Collection::new(state.clone()))
@@ -145,6 +140,15 @@ struct State {
 }
 
 impl State {
+    fn new(keyring: Keyring) -> Arc<Self> {
+        Arc::new(Self {
+            keyring,
+            sessions: Mutex::default(),
+            next_session: AtomicU64::new(0),
+            exported: Mutex::default(),
+        })
+    }
+
     fn sessions(&self) -> MutexGuard<'_, HashMap<OwnedObjectPath, Session>> {
         self.sessions
             .lock()
@@ -167,6 +171,42 @@ impl State {
     fn new_session_path(&self) -> OwnedObjectPath {
         let id = self.next_session.fetch_add(1, Ordering::Relaxed);
         OwnedObjectPath::try_from(format!("{SESSION_PATH}/{id}")).expect("a valid object path")
+    }
+
+    /// Records `session` at `path` and exports its object, unless its owner has left the bus by
+    /// then or can't be checked. The watcher may handle the owner's departure before the session
+    /// is recorded, and would then never close it; a departure after the check finds the session
+    /// recorded.
+    async fn record_session(
+        self: &Arc<Self>,
+        connection: &zbus::Connection,
+        path: OwnedObjectPath,
+        session: Session,
+    ) -> Result<(), Error> {
+        let owner = zbus::names::BusName::try_from(session.owner.clone())?;
+        self.sessions().insert(path.clone(), session);
+        connection
+            .object_server()
+            .at(
+                &path,
+                session::SessionObject::new(self.clone(), path.clone()),
+            )
+            .await?;
+        let owner_present = has_owner(connection, owner).await;
+        if let Ok(true) = owner_present {
+            return Ok(());
+        }
+        self.sessions().remove(&path);
+        connection
+            .object_server()
+            .remove::<session::SessionObject, _>(&path)
+            .await?;
+        match owner_present {
+            Ok(_) => Err(Error::Failed(
+                "the client left the bus before its session was open".into(),
+            )),
+            Err(error) => Err(error.into()),
+        }
     }
 
     /// Searches, and exports every item found so the caller can use the paths it gets.
@@ -225,6 +265,17 @@ struct Secret {
     parameters: Vec<u8>,
     value: Vec<u8>,
     content_type: String,
+}
+
+async fn has_owner(
+    connection: &zbus::Connection,
+    name: zbus::names::BusName<'_>,
+) -> zbus::Result<bool> {
+    let bus = zbus::fdo::DBusProxy::builder(connection)
+        .cache_properties(zbus::proxy::CacheProperties::No)
+        .build()
+        .await?;
+    Ok(bus.name_has_owner(name).await?)
 }
 
 /// Removes the object at `path` once the method running on it has returned, since the object
