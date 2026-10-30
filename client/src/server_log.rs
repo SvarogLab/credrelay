@@ -1,6 +1,7 @@
 //! The server's diagnostics, passed on line by line and marked as the server's.
 
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};
+use tracing_subscriber::EnvFilter;
 
 pub const PREFIX: &str = "server: ";
 
@@ -25,11 +26,15 @@ pub async fn forward(server_stderr: impl AsyncRead + Unpin, mut out: impl AsyncW
     }
 }
 
-/// The filter the server is started with: the client's own `RUST_LOG`, or `info` without one.
-pub fn filter(rust_log: Option<String>) -> String {
-    rust_log
+/// The filter both processes run: `RUST_LOG`, or `info` when it is unset or empty. A value that
+/// doesn't parse is an error here rather than ignored, since the server would refuse it and exit.
+pub fn filter(rust_log: Option<String>) -> Result<(String, EnvFilter), String> {
+    let filter = rust_log
         .filter(|filter| !filter.is_empty())
-        .unwrap_or_else(|| "info".to_owned())
+        .unwrap_or_else(|| "info".to_owned());
+    let parsed =
+        EnvFilter::try_new(&filter).map_err(|error| format!("invalid RUST_LOG: {error}"))?;
+    Ok((filter, parsed))
 }
 
 #[cfg(test)]
@@ -49,8 +54,17 @@ mod tests {
 
     #[test]
     fn the_server_gets_the_clients_filter_or_info() {
-        assert_eq!(filter(Some("debug,zbus=warn".into())), "debug,zbus=warn");
-        assert_eq!(filter(Some(String::new())), "info");
-        assert_eq!(filter(None), "info");
+        assert_eq!(
+            filter(Some("debug,zbus=warn".into())).unwrap().0,
+            "debug,zbus=warn"
+        );
+        assert_eq!(filter(Some(String::new())).unwrap().0, "info");
+        assert_eq!(filter(None).unwrap().0, "info");
+    }
+
+    #[test]
+    fn a_filter_that_doesnt_parse_is_an_error_naming_rust_log() {
+        let error = filter(Some("x=loud".into())).unwrap_err();
+        assert!(error.starts_with("invalid RUST_LOG: "), "{error}");
     }
 }
