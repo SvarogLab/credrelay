@@ -8,7 +8,7 @@ use credrelay_client::keyring::Keyring;
 use credrelay_client::prefixes::Prefixes;
 use credrelay_client::rpc::Rpc;
 use credrelay_client::schemes;
-use librelay::client::lifecycle;
+use librelay::client::lifecycle::{self, Died};
 use librelay::client::log::{self, LogFilter};
 use librelay::client::spawn::Server;
 
@@ -22,7 +22,7 @@ async fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    let server_args = filter.server_args().to_vec();
+    let server_args = filter.server_args();
     log::init(filter);
 
     match run(config, server_args).await {
@@ -36,7 +36,7 @@ async fn main() -> ExitCode {
 
 /// Serves until the server exits or the link to it breaks. There is no restarting it here: either
 /// way every later request would fail, so this process exits and its supervisor starts both afresh.
-async fn run(config: Config, server_args: Vec<String>) -> Result<(), String> {
+async fn run(config: Config, server_args: [String; 2]) -> Result<(), String> {
     let go_keyring =
         Prefixes::new(config.go_keyring_prefixes).map_err(|error| error.to_string())?;
     let mut server = Server::spawn(config.server_exe, server_args)
@@ -65,6 +65,11 @@ async fn run(config: Config, server_args: Vec<String>) -> Result<(), String> {
         .map_err(|error| format!("can't serve {}: {error}", dbus::BUS_NAME))?;
     tracing::info!("serving {}", dbus::BUS_NAME);
 
-    lifecycle::died(&mut server.child, rpc.broken()).await;
-    Err("credrelay-server exited or stopped answering; exiting to start afresh".into())
+    match lifecycle::died(&mut server.child, rpc.broken()).await {
+        Died::Exited(Ok(status)) => Err(format!("credrelay-server exited: {status}")),
+        Died::Exited(Err(error)) => Err(format!("can't wait for credrelay-server: {error}")),
+        Died::TransportEnded => {
+            Err("the link to credrelay-server broke; exiting to start afresh".into())
+        }
+    }
 }

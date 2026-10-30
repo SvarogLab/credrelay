@@ -19,6 +19,6 @@ mod tests {
     fn the_log_filter_is_required() {
         assert!(Config::try_parse_from(["credrelay-server"]).is_err());
         let config = Config::try_parse_from(["credrelay-server", "--log-filter", "debug"]).unwrap();
-        assert_eq!(config.log.log_filter, "debug");
+        assert_eq!(config.log.filter, "debug");
     }
 }
