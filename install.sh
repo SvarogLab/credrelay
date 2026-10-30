@@ -1,8 +1,8 @@
 #!/bin/sh
-# Builds credrelay, installs the Linux binaries and credrelay-server.exe into /usr/local/bin and the
-# Windows builds of credrelay-keyring and credrelay-bao-helper into %LOCALAPPDATA%\Programs\credrelay,
-# and installs the systemd user unit and the D-Bus activation file that start the client the first
-# time an application asks for the Secret Service. Restarts a running client, starts nothing else,
+# Builds credrelay and installs it: credrelay-client and credrelay-server.exe into /usr/local/bin,
+# credrelay-keyring and credrelay-bao-helper with cargo install, their Windows builds into
+# %LOCALAPPDATA%\Programs\credrelay, and the systemd user unit and the D-Bus activation file that
+# start the client the first time an application asks for the Secret Service. Restarts a running client, starts nothing else,
 # and doesn't touch any application's stored login. Safe to re-run any time to rebuild and reinstall.
 set -eu
 
@@ -28,19 +28,20 @@ echo "==> Host architecture $(uname -m) -> Windows target $WIN_TARGET"
 
 rustup target add "$WIN_TARGET"
 
-echo "==> Building the Linux binaries (release)"
-(cd "$REPO_DIR" && cargo build --release -p credrelay-client -p credrelay-keyring)
+echo "==> Building credrelay-client (release)"
+(cd "$REPO_DIR" && cargo build --release -p credrelay-client)
 
-echo "==> Building the Windows binaries (release, $WIN_TARGET)"
+echo "==> Building credrelay-server and the Windows helpers (release, $WIN_TARGET)"
 (cd "$REPO_DIR" && cargo xwin build --release -p credrelay-server -p credrelay-keyring --target "$WIN_TARGET")
 
-echo "==> Installing binaries into $BIN_DIR (sudo)"
-for bin in credrelay-client credrelay-keyring credrelay-bao-helper; do
-    sudo install -m 755 "$REPO_DIR/target/release/$bin" "$BIN_DIR/$bin"
-done
+echo "==> Installing credrelay-client and credrelay-server.exe into $BIN_DIR (sudo)"
+sudo install -m 755 "$REPO_DIR/target/release/credrelay-client" "$BIN_DIR/credrelay-client"
 sudo install -m 755 "$REPO_DIR/target/$WIN_TARGET/release/credrelay-server.exe" "$BIN_DIR/credrelay-server.exe"
 
-echo "==> Installing the Windows helpers into $WIN_LOCALAPPDATA\\Programs\\credrelay"
+echo "==> Installing credrelay-keyring and credrelay-bao-helper (cargo install)"
+cargo install --path "$REPO_DIR/keyring"
+
+printf '%s\n' "==> Installing the Windows helpers into $WIN_LOCALAPPDATA\\Programs\\credrelay"
 mkdir -p "$WIN_BIN_DIR"
 for bin in credrelay-keyring credrelay-bao-helper; do
     install -m 755 "$REPO_DIR/target/$WIN_TARGET/release/$bin.exe" "$WIN_BIN_DIR/$bin.exe"
@@ -59,9 +60,9 @@ cat <<EOF
 
 ==> Installed:
     $BIN_DIR/credrelay-client
-    $BIN_DIR/credrelay-keyring
-    $BIN_DIR/credrelay-bao-helper
     $BIN_DIR/credrelay-server.exe
+    ${CARGO_HOME:-$HOME/.cargo}/bin/credrelay-keyring
+    ${CARGO_HOME:-$HOME/.cargo}/bin/credrelay-bao-helper
     $WIN_LOCALAPPDATA\\Programs\\credrelay\\credrelay-keyring.exe
     $WIN_LOCALAPPDATA\\Programs\\credrelay\\credrelay-bao-helper.exe
     $UNIT_DIR/credrelay.service
