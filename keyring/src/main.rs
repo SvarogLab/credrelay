@@ -1,35 +1,32 @@
-use std::io::{Read, Write};
+use std::io::{self, Read};
 use std::process::ExitCode;
 
 use clap::Parser;
-use credrelay_keyring::backend::Platform;
-use credrelay_keyring::cli::{self, Cli, Command};
+use credrelay_keyring::backend::{BackendError, Platform};
+use credrelay_keyring::cli::{self, Cli, CliError, Command};
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> ExitCode {
-    let cli = Cli::parse();
+    credrelay_keyring::finish("credrelay-keyring", run(Cli::parse()).await)
+}
+
+#[derive(Debug, thiserror::Error)]
+enum MainError {
+    #[error("can't read the secret from stdin: {0}")]
+    ReadSecret(io::Error),
+    #[error(transparent)]
+    Backend(#[from] BackendError),
+    #[error(transparent)]
+    Cli(#[from] CliError),
+}
+
+async fn run(cli: Cli) -> Result<Vec<u8>, MainError> {
     let mut input = Vec::new();
-    if matches!(cli.command, Command::Set(_))
-        && let Err(error) = std::io::stdin().read_to_end(&mut input)
-    {
-        eprintln!("credrelay-keyring: can't read the secret from stdin: {error}");
-        return ExitCode::FAILURE;
+    if matches!(cli.command, Command::Set(_)) {
+        io::stdin()
+            .read_to_end(&mut input)
+            .map_err(MainError::ReadSecret)?;
     }
-    let result = match Platform::connect().await {
-        Ok(backend) => cli::run(&backend, &cli.command, &input).await,
-        Err(error) => Err(error.into()),
-    };
-    match result {
-        Ok(output) => match std::io::stdout().write_all(&output) {
-            Ok(()) => ExitCode::SUCCESS,
-            Err(error) => {
-                eprintln!("credrelay-keyring: can't write to stdout: {error}");
-                ExitCode::FAILURE
-            }
-        },
-        Err(error) => {
-            eprintln!("credrelay-keyring: {error}");
-            ExitCode::FAILURE
-        }
-    }
+    let backend = Platform::connect().await?;
+    Ok(cli::run(&backend, &cli.command, &input).await?)
 }
