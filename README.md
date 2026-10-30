@@ -72,8 +72,9 @@ share one credential.
   (`ReadAlias`, `/org/freedesktop/secrets/aliases/default`).
 - Sessions `plain` and `dh-ietf1024-sha256-aes128-cbc-pkcs7`. libsecret and the Rust `keyring` crate
   ask for the latter, and the Rust crate has no fallback.
-- `SearchItems`, `CreateItem`, `GetSecret`, `GetSecrets`, `SetSecret`, `Delete`, and item properties
-  `Attributes`, `Label`, `Locked`.
+- `SearchItems`, `CreateItem`, `GetSecret`, `GetSecrets`, `SetSecret`, `Delete`, the collection's
+  `Items`, and item properties `Attributes`, `Label`, `Locked`. `Items` lists an item once its object
+  answers: one stored on the Windows side while the service runs is listed from the next read on.
 - Nothing is ever locked, and no call returns a prompt: `Unlock` returns what it was given.
 - A credential holds one secret per target, so `CreateItem` replaces an item with exactly the same
   attributes whether or not `replace` is set.
@@ -147,6 +148,15 @@ builds and installs:
 The first application that asks for the Secret Service starts the client. It needs systemd running
 in WSL (`systemd=true` under `[boot]` in `/etc/wsl.conf`). Re-running `install.sh` restarts a running
 client, so it picks up the new build; the client and the server are always installed together.
+
+The unit is `Type=dbus`: systemd hears the service is ready once the client owns
+`org.freedesktop.secrets`, which it takes only after the server has answered one request. Any startup
+failure exits non-zero with its reason in the journal, and systemd restarts the client 2 seconds
+after a failure.
+
+`systemctl --user stop credrelay` stops gracefully: the client gives up the bus name, answers the
+calls in flight, closes the link, and the server exits on its own. A server still running 5 seconds
+later fails the stop, and systemd kills it.
 
 Only one process can own `org.freedesktop.secrets`. If another Secret Service, gnome-keyring for one,
 runs on the same session bus, stop and disable it first; `systemctl --user status credrelay` shows
@@ -241,16 +251,19 @@ credential, which logs the Windows side out too.
 
 ## Logging
 
-The client logs to stderr, which systemd sends to the journal; colors only on a terminal. Verbosity
-follows `RUST_LOG`, `info` when it is unset or empty; a value that doesn't parse stops the client
-before it starts the server, with the error on stderr. The client passes the same filter to the
-server as `--log-filter` and writes each line of the server's stderr to its own behind a `server:`
-prefix followed by a space, unchanged otherwise. Off a terminal the server writes no timestamps of
-its own; the journal stamps every line.
+Both processes log to the client's stderr, which systemd sends to the journal:
 
 ```sh
 journalctl --user -u credrelay
 ```
+
+- The filter is `RUST_LOG`, `info` when unset or empty; set it for the service with
+  `systemctl --user edit credrelay.service` and `Environment=RUST_LOG=debug` under `[Service]`. An
+  invalid one stops the client before it starts anything.
+- The client passes the same filter to the server as `--log-filter`.
+- Each line the server writes is forwarded with a `server:` prefix followed by a space. The server
+  leaves out its own timestamp when its stderr isn't a terminal, since the journal adds one.
+- Output is colored only on a terminal.
 
 ## Building
 
@@ -303,11 +316,11 @@ eval "$(cargo xwin env --target aarch64-pc-windows-msvc)"
 unset CARGO_TARGET_AARCH64_PC_WINDOWS_MSVC_RUNNER
 cargo test -p credrelay-wincred -p credrelay-server -p credrelay-keyring --target aarch64-pc-windows-msvc
 cargo clippy -p credrelay-wincred -p credrelay-server -p credrelay-keyring --all-targets \
-  --target aarch64-pc-windows-msvc
+  --target aarch64-pc-windows-msvc -- -D warnings
 ```
 
-`cargo xwin test` would set `CARGO_TARGET_AARCH64_PC_WINDOWS_MSVC_RUNNER=wine`; WSL runs the test
-binary itself, so the runner is unset and plain `cargo test` used instead.
+(`cargo xwin env` sets the target's runner to `wine`, which isn't needed here, so it is unset.) The
+client is unix-only, so only these three build for Windows.
 
 ## Security notes
 
