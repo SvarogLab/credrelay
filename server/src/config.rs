@@ -1,4 +1,5 @@
 use clap::Parser;
+use librelay::server::log::LogArgs;
 
 #[derive(Parser, Debug)]
 #[command(
@@ -6,10 +7,8 @@ use clap::Parser;
 )]
 // Every flag is required, with no default: credrelay-client passes them all.
 pub struct Config {
-    /// What to log, in `RUST_LOG` syntax, e.g. `info`. A flag rather than `RUST_LOG` itself, since
-    /// environment variables set in WSL don't reach a Windows process started from it.
-    #[arg(long)]
-    pub log_filter: String,
+    #[command(flatten)]
+    pub log: LogArgs,
 }
 
 #[cfg(test)]
@@ -20,6 +19,6 @@ mod tests {
     fn the_log_filter_is_required() {
         assert!(Config::try_parse_from(["credrelay-server"]).is_err());
         let config = Config::try_parse_from(["credrelay-server", "--log-filter", "debug"]).unwrap();
-        assert_eq!(config.log_filter, "debug");
+        assert_eq!(config.log.log_filter, "debug");
     }
 }

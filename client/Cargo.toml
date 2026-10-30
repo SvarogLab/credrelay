@@ -16,6 +16,7 @@ path = "src/main.rs"
 test-support = ["credrelay-protocol/memory"]
 
 [dependencies]
+librelay = { workspace = true, features = ["client"] }
 credrelay-protocol = { workspace = true }
 tokio = { workspace = true }
 zbus = { workspace = true }
@@ -29,7 +30,6 @@ zeroize = { workspace = true }
 serde = { workspace = true }
 percent-encoding = { workspace = true }
 tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
 thiserror = { workspace = true }
 clap = { workspace = true }
 

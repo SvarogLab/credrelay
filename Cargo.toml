@@ -14,6 +14,7 @@ description = "Serves the freedesktop Secret Service on WSL from the Windows Cre
 credrelay-protocol = { path = "protocol" }
 credrelay-wincred = { path = "wincred" }
 credrelay-client = { path = "client" }
+librelay = { git = "https://github.com/SvarogLab/librelay", tag = "v0.1.0", default-features = false }
 tokio = { version = "1.54", features = ["full"] }
 zbus = { version = "6.2", default-features = false, features = ["tokio", "service", "proxy"] }
 serde = { version = "1.0.229", features = ["derive"] }

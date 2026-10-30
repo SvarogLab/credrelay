@@ -1,35 +1,31 @@
-use std::io::IsTerminal;
 use std::process::ExitCode;
 use std::time::Duration;
 
 use clap::Parser;
-
 use credrelay_client::config::Config;
 use credrelay_client::dbus;
 use credrelay_client::keyring::Keyring;
 use credrelay_client::prefixes::Prefixes;
 use credrelay_client::rpc::Rpc;
 use credrelay_client::schemes;
-use credrelay_client::server_log;
-use credrelay_client::spawn::Server;
+use librelay::client::lifecycle;
+use librelay::client::log::{self, LogFilter};
+use librelay::client::spawn::Server;
 
 #[tokio::main]
 async fn main() -> ExitCode {
     let config = Config::parse();
-    let (log_filter, env_filter) = match server_log::filter(std::env::var("RUST_LOG").ok()) {
+    let filter = match LogFilter::from_env() {
         Ok(filter) => filter,
         Err(error) => {
             eprintln!("credrelay-client: {error}");
             return ExitCode::FAILURE;
         }
     };
-    tracing_subscriber::fmt()
-        .with_writer(std::io::stderr)
-        .with_ansi(std::io::stderr().is_terminal())
-        .with_env_filter(env_filter)
-        .init();
+    let server_args = filter.server_args().to_vec();
+    log::init(filter);
 
-    match run(config, log_filter).await {
+    match run(config, server_args).await {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             tracing::error!("{error}");
@@ -40,14 +36,16 @@ async fn main() -> ExitCode {
 
 /// Serves until the server exits or the link to it breaks. There is no restarting it here: either
 /// way every later request would fail, so this process exits and its supervisor starts both afresh.
-async fn run(config: Config, log_filter: String) -> Result<(), String> {
+async fn run(config: Config, server_args: Vec<String>) -> Result<(), String> {
     let go_keyring =
         Prefixes::new(config.go_keyring_prefixes).map_err(|error| error.to_string())?;
-    let mut server = Server::spawn(config.server_exe, vec!["--log-filter".into(), log_filter])
+    let mut server = Server::spawn(config.server_exe, server_args)
         .await
         .map_err(|error| error.to_string())?;
-
-    tokio::spawn(server_log::forward(server.stderr, tokio::io::stderr()));
+    tokio::spawn(log::forward_server_stderr(
+        server.stderr,
+        tokio::io::stderr(),
+    ));
 
     let rpc = Rpc::new(
         server.stdout,
@@ -67,13 +65,6 @@ async fn run(config: Config, log_filter: String) -> Result<(), String> {
         .map_err(|error| format!("can't serve {}: {error}", dbus::BUS_NAME))?;
     tracing::info!("serving {}", dbus::BUS_NAME);
 
-    tokio::select! {
-        status = server.child.wait() => {
-            let status = status.map_err(|error| error.to_string())?;
-            Err(format!("credrelay-server exited: {status}"))
-        }
-        () = rpc.broken() => {
-            Err("the link to credrelay-server broke; exiting to start afresh".into())
-        }
-    }
+    lifecycle::died(&mut server.child, rpc.broken()).await;
+    Err("credrelay-server exited or stopped answering; exiting to start afresh".into())
 }

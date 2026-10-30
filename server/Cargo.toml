@@ -12,10 +12,10 @@ name = "credrelay-server"
 path = "src/main.rs"
 
 [dependencies]
+librelay = { workspace = true, features = ["server"] }
 credrelay-protocol = { workspace = true }
 clap = { workspace = true }
 tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
 credrelay-wincred = { workspace = true }
