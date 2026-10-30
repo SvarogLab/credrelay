@@ -29,3 +29,7 @@ aes = { version = "0.9", features = ["zeroize"] }
 cbc = { version = "0.2", features = ["alloc", "zeroize"] }
 getrandom = "0.4"
 zeroize = "1.9"
+
+[workspace.lints.clippy]
+# A module with submodules lives in `name.rs` beside `name/`, not in `name/mod.rs`.
+mod_module_files = "warn"

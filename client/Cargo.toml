@@ -33,3 +33,6 @@ clap = { workspace = true }
 # An independent implementation of the client side of the DH session, to test against.
 oo7 = { version = "0.6", default-features = false, features = ["tokio", "native_crypto", "unstable"] }
 credrelay-protocol = { workspace = true, features = ["memory"] }
+
+[lints]
+workspace = true

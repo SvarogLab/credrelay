@@ -22,3 +22,6 @@ windows-sys = { workspace = true }
 
 [dev-dependencies]
 credrelay-protocol = { workspace = true, features = ["memory"] }
+
+[lints]
+workspace = true
