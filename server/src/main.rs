@@ -2,6 +2,7 @@ mod config;
 mod serve;
 mod wincred;
 
+use std::io::IsTerminal;
 use std::process::ExitCode;
 
 use clap::Parser;
@@ -12,6 +13,7 @@ fn main() -> ExitCode {
     // stdout carries the protocol, so diagnostics go to stderr, which the client forwards.
     tracing_subscriber::fmt()
         .with_writer(std::io::stderr)
+        .with_ansi(std::io::stderr().is_terminal())
         .init();
 
     Config::parse();
