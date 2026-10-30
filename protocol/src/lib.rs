@@ -3,14 +3,12 @@
 //!
 //! JSON lines rather than a binary framing so the server can be driven by hand for testing.
 
-mod allowlist;
 mod handler;
 #[cfg(any(test, feature = "memory"))]
 mod memory;
 
 use serde::{Deserialize, Serialize};
 
-pub use allowlist::{Allowlist, AllowlistError};
 pub use handler::handle;
 #[cfg(any(test, feature = "memory"))]
 pub use memory::MemoryStore;
@@ -55,8 +53,6 @@ pub enum Reply {
 pub enum Failure {
     #[error("no such credential")]
     NotFound,
-    #[error("target is outside the allowed prefixes")]
-    Denied,
     #[error("credential store failed: {0}")]
     Store(String),
 }

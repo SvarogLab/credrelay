@@ -188,6 +188,29 @@ mod tests {
         );
     }
 
+    /// A target in which `service=` or `target=` follows the first colon reads back but is never
+    /// listed, so a scheme that needs its credentials listed must not name them that way.
+    #[test]
+    fn a_target_with_a_keyword_after_its_first_colon_is_left_out_of_listings() {
+        let prefix = format!("credrelay-test-{}:", std::process::id());
+        let hidden = format!("{prefix}service=x");
+        let listed = format!("{prefix}username=x");
+        WinCred.write(&hidden, "", b"1").unwrap();
+        WinCred.write(&listed, "", b"2").unwrap();
+        let found = WinCred.list(&prefix).unwrap();
+        let read = WinCred.read(&hidden);
+        WinCred.delete(&hidden).unwrap();
+        WinCred.delete(&listed).unwrap();
+        assert_eq!(read.unwrap(), b"1");
+        assert_eq!(
+            found,
+            vec![Credential {
+                target: listed,
+                username: String::new()
+            }]
+        );
+    }
+
     #[test]
     fn list_of_an_unused_prefix_is_empty() {
         assert_eq!(WinCred.list(&target("nothing-here:")).unwrap(), Vec::new());

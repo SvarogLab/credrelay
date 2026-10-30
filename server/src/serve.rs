@@ -1,6 +1,6 @@
 use std::io::{self, BufRead, Write};
 
-use credrelay_protocol::{Allowlist, CredentialStore, Request, decode_line, encode_line, handle};
+use credrelay_protocol::{CredentialStore, Request, decode_line, encode_line, handle};
 
 /// Answers requests from `input` on `output`, one line each, until `input` ends.
 ///
@@ -12,14 +12,13 @@ use credrelay_protocol::{Allowlist, CredentialStore, Request, decode_line, encod
 )]
 pub fn serve(
     store: &impl CredentialStore,
-    allowlist: &Allowlist,
     input: impl BufRead,
     mut output: impl Write,
 ) -> io::Result<()> {
     for line in input.lines() {
         let request: Request = decode_line(&line?)
             .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
-        let response = handle(store, allowlist, request);
+        let response = handle(store, request);
         output.write_all(encode_line(&response).as_bytes())?;
         output.flush()?;
     }
@@ -33,9 +32,8 @@ mod tests {
 
     fn run(input: &str) -> (io::Result<()>, Vec<Response>) {
         let store = MemoryStore::default();
-        let allowlist = Allowlist::new(vec!["gh:".into()]).unwrap();
         let mut output = Vec::new();
-        let result = serve(&store, &allowlist, input.as_bytes(), &mut output);
+        let result = serve(&store, input.as_bytes(), &mut output);
         let responses = String::from_utf8(output)
             .unwrap()
             .lines()

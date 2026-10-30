@@ -5,7 +5,6 @@ mod wincred;
 use std::process::ExitCode;
 
 use clap::Parser;
-use credrelay_protocol::Allowlist;
 
 use config::Config;
 
@@ -15,14 +14,7 @@ fn main() -> ExitCode {
         .with_writer(std::io::stderr)
         .init();
 
-    let config = Config::parse();
-    let allowlist = match Allowlist::new(config.allow_prefixes) {
-        Ok(allowlist) => allowlist,
-        Err(error) => {
-            tracing::error!(%error, "refusing to start");
-            return ExitCode::FAILURE;
-        }
-    };
+    Config::parse();
 
     #[cfg(windows)]
     {
@@ -30,7 +22,6 @@ fn main() -> ExitCode {
         // WSL doesn't end a Windows process along with the Linux process that spawned it.
         match serve::serve(
             &wincred::WinCred,
-            &allowlist,
             std::io::stdin().lock(),
             std::io::stdout().lock(),
         ) {
@@ -43,7 +34,6 @@ fn main() -> ExitCode {
     }
     #[cfg(not(windows))]
     {
-        let _ = allowlist;
         tracing::error!("the Credential Manager exists only on Windows");
         ExitCode::FAILURE
     }
