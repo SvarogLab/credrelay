@@ -1,4 +1,4 @@
-use crate::{CredentialStore, Reply, Request, Response, decode_line, encode_line};
+use crate::{CredentialStore, DecodeError, Reply, Request, Response, decode_line, encode_line};
 
 /// Answers one request from `store`.
 pub fn handle(store: &impl CredentialStore, request: Request) -> Response {
@@ -18,7 +18,7 @@ pub fn handle(store: &impl CredentialStore, request: Request) -> Response {
 
 /// Answers one request line with one answer line, newline included. A line that isn't a request
 /// gets no answer: the client never sends one.
-pub fn answer(store: &impl CredentialStore, line: &str) -> serde_json::Result<String> {
+pub fn answer(store: &impl CredentialStore, line: &str) -> Result<String, DecodeError> {
     let request: Request = decode_line(line)?;
     Ok(encode_line(&handle(store, request)))
 }

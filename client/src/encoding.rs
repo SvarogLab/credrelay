@@ -30,10 +30,14 @@ type AesKey = Zeroizing<[u8; 16]>;
 pub enum EncodingError {
     #[error("unsupported algorithm {0:?}")]
     Unsupported(String),
-    #[error("malformed session parameters: {0}")]
-    Malformed(String),
+    #[error("the client's public key is out of range")]
+    PublicKeyOutOfRange,
+    #[error("the IV is not {IV_BYTES} bytes")]
+    IvLength(#[source] std::array::TryFromSliceError),
+    #[error("the secret doesn't decrypt: {0}")]
+    Undecryptable(#[source] cbc::cipher::block_padding::Error),
     #[error("no randomness for a key or IV: {0}")]
-    Random(String),
+    Random(#[from] getrandom::Error),
 }
 
 /// How secrets cross the bus in one session.
@@ -53,13 +57,10 @@ impl Encoding {
                     .expect("the group prime is valid hex");
                 let client_public = BigUint::from_bytes_be(input);
                 if client_public <= BigUint::from(1u8) || client_public >= &prime - 1u8 {
-                    return Err(EncodingError::Malformed(
-                        "client public key out of range".into(),
-                    ));
+                    return Err(EncodingError::PublicKeyOutOfRange);
                 }
                 let mut private_bytes = Zeroizing::new([0u8; GROUP_BYTES]);
-                getrandom::fill(private_bytes.as_mut_slice())
-                    .map_err(|error| EncodingError::Random(error.to_string()))?;
+                getrandom::fill(private_bytes.as_mut_slice())?;
                 let private = BigUint::from_bytes_be(private_bytes.as_slice());
                 let public = BigUint::from(2u8).modpow(&private, &prime);
                 let shared = Zeroizing::new(client_public.modpow(&private, &prime).to_bytes_be());
@@ -82,8 +83,7 @@ impl Encoding {
             Self::Plain => Ok((Vec::new(), secret.to_vec())),
             Self::Aes(key) => {
                 let mut iv = [0u8; IV_BYTES];
-                getrandom::fill(&mut iv)
-                    .map_err(|error| EncodingError::Random(error.to_string()))?;
+                getrandom::fill(&mut iv)?;
                 let value = cbc::Encryptor::<Aes128>::new_from_slices(key.as_slice(), &iv)
                     .expect("AES-128-CBC takes a 16-byte key and IV")
                     .encrypt_padded_vec::<Pkcs7>(secret);
@@ -96,13 +96,11 @@ impl Encoding {
         match self {
             Self::Plain => Ok(value.to_vec()),
             Self::Aes(key) => {
-                let iv: [u8; IV_BYTES] = parameters
-                    .try_into()
-                    .map_err(|_| EncodingError::Malformed("the IV is not 16 bytes".into()))?;
+                let iv: [u8; IV_BYTES] = parameters.try_into().map_err(EncodingError::IvLength)?;
                 cbc::Decryptor::<Aes128>::new_from_slices(key.as_slice(), &iv)
                     .expect("AES-128-CBC takes a 16-byte key and IV")
                     .decrypt_padded_vec::<Pkcs7>(value)
-                    .map_err(|error| EncodingError::Malformed(error.to_string()))
+                    .map_err(EncodingError::Undecryptable)
             }
         }
     }
@@ -163,11 +161,11 @@ mod tests {
         let (encoding, _) = Encoding::negotiate(DH_AES, client_public.as_ref()).unwrap();
         assert!(matches!(
             encoding.decode(&[0; 16], &[1; 15]),
-            Err(EncodingError::Malformed(_))
+            Err(EncodingError::Undecryptable(_))
         ));
         assert!(matches!(
             encoding.decode(&[0; 15], &[1; 16]),
-            Err(EncodingError::Malformed(_))
+            Err(EncodingError::IvLength(_))
         ));
     }
 }

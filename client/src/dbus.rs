@@ -10,7 +10,7 @@ mod session;
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 use futures::StreamExt;
 
@@ -100,7 +100,7 @@ async fn close_sessions_of_departed(
         }
         let departed = args.name().to_string();
         let closed: Vec<OwnedObjectPath> = {
-            let mut sessions = state.sessions.lock().unwrap();
+            let mut sessions = state.sessions();
             let closed = sessions
                 .iter()
                 .filter(|(_, session)| session.owner == departed)
@@ -131,10 +131,14 @@ struct State {
 }
 
 impl State {
-    fn encoding(&self, session: &OwnedObjectPath) -> Result<Arc<Encoding>, Error> {
+    fn sessions(&self) -> MutexGuard<'_, HashMap<OwnedObjectPath, Session>> {
         self.sessions
             .lock()
-            .unwrap()
+            .expect("no code holding the sessions panics")
+    }
+
+    fn encoding(&self, session: &OwnedObjectPath) -> Result<Arc<Encoding>, Error> {
+        self.sessions()
             .get(session)
             .map(|session| session.encoding.clone())
             .ok_or_else(|| Error::NoSession(session.to_string()))
@@ -250,7 +254,9 @@ impl From<EncodingError> for Error {
         let message = error.to_string();
         match error {
             EncodingError::Unsupported(_) => Self::NotSupported(message),
-            EncodingError::Malformed(_) => Self::InvalidArgs(message),
+            EncodingError::PublicKeyOutOfRange
+            | EncodingError::IvLength(_)
+            | EncodingError::Undecryptable(_) => Self::InvalidArgs(message),
             EncodingError::Random(_) => Self::Failed(message),
         }
     }

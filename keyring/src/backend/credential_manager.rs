@@ -1,3 +1,5 @@
+#![cfg(windows)]
+
 use credrelay_wincred::{WinCred, WinCredError, go_keyring_target};
 
 use super::{Backend, BackendError};
@@ -16,21 +18,19 @@ impl Backend for CredentialManager {
         match WinCred.read(&go_keyring_target(service, username)) {
             Ok(secret) => Ok(Some(secret)),
             Err(WinCredError::NotFound) => Ok(None),
-            Err(error) => Err(BackendError(error.to_string())),
+            Err(error) => Err(error.into()),
         }
     }
 
     async fn set(&self, service: &str, username: &str, secret: &[u8]) -> Result<(), BackendError> {
-        WinCred
-            .write(&go_keyring_target(service, username), username, secret)
-            .map_err(|error| BackendError(error.to_string()))
+        Ok(WinCred.write(&go_keyring_target(service, username), username, secret)?)
     }
 
     async fn delete(&self, service: &str, username: &str) -> Result<bool, BackendError> {
         match WinCred.delete(&go_keyring_target(service, username)) {
             Ok(()) => Ok(true),
             Err(WinCredError::NotFound) => Ok(false),
-            Err(error) => Err(BackendError(error.to_string())),
+            Err(error) => Err(error.into()),
         }
     }
 }

@@ -1,6 +1,5 @@
 //! Where secrets are kept: the Secret Service on Linux, the Credential Manager on Windows.
 
-#[cfg(windows)]
 mod credential_manager;
 #[cfg(test)]
 pub mod memory;
@@ -13,8 +12,14 @@ pub use credential_manager::CredentialManager as Platform;
 pub use secret_service::SecretService as Platform;
 
 #[derive(Debug, thiserror::Error)]
-#[error("{0}")]
-pub struct BackendError(pub String);
+pub enum BackendError {
+    #[cfg(unix)]
+    #[error(transparent)]
+    SecretService(#[from] oo7::dbus::Error),
+    #[cfg(windows)]
+    #[error(transparent)]
+    CredentialManager(#[from] credrelay_wincred::WinCredError),
+}
 
 /// One secret per `(service, username)`, as go-keyring keeps them.
 #[expect(

@@ -45,7 +45,7 @@ impl Service {
             Encoding::Aes(_) => OwnedVariant::try_from(Variant::from(output)),
         }?;
         let path = self.state.new_session_path();
-        self.state.sessions.lock().unwrap().insert(
+        self.state.sessions().insert(
             path.clone(),
             Session {
                 encoding: Arc::new(encoding),

@@ -8,7 +8,9 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 
-use credrelay_protocol::{Credential, Failure, Reply, Request, Response, decode_line, encode_line};
+use credrelay_protocol::{
+    Credential, DecodeError, Failure, Reply, Request, Response, decode_line, encode_line,
+};
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};
 
 #[derive(Debug, thiserror::Error)]
@@ -18,7 +20,15 @@ pub enum RpcError {
     #[error("credential store failed: {0}")]
     Store(String),
     #[error("lost the link to credrelay-server: {0}")]
-    Link(String),
+    Link(#[from] io::Error),
+    #[error("credrelay-server closed the stream unanswered")]
+    Unanswered,
+    #[error("credrelay-server answered with something that isn't an answer: {0}")]
+    Garbled(#[from] DecodeError),
+    #[error("credrelay-server answered with the wrong kind of reply: {0:?}")]
+    WrongKind(Reply),
+    #[error("credrelay-server didn't answer within {0:?}")]
+    TimedOut(Duration),
 }
 
 impl From<Failure> for RpcError {
@@ -63,7 +73,7 @@ impl Rpc {
         let target = target.to_owned();
         match self.call(Request::Read { target }).await? {
             Reply::Secret(secret) => Ok(secret),
-            other => Err(unexpected(&other)),
+            other => Err(RpcError::WrongKind(other)),
         }
     }
 
@@ -75,7 +85,7 @@ impl Rpc {
         };
         match self.call(request).await? {
             Reply::Done => Ok(()),
-            other => Err(unexpected(&other)),
+            other => Err(RpcError::WrongKind(other)),
         }
     }
 
@@ -83,7 +93,7 @@ impl Rpc {
         let target = target.to_owned();
         match self.call(Request::Delete { target }).await? {
             Reply::Done => Ok(()),
-            other => Err(unexpected(&other)),
+            other => Err(RpcError::WrongKind(other)),
         }
     }
 
@@ -91,37 +101,28 @@ impl Rpc {
         let prefix = prefix.to_owned();
         match self.call(Request::List { prefix }).await? {
             Reply::Credentials(credentials) => Ok(credentials),
-            other => Err(unexpected(&other)),
+            other => Err(RpcError::WrongKind(other)),
         }
     }
 
     async fn call(&self, request: Request) -> Result<Reply, RpcError> {
         let exchange = async {
-            let lost = |error: io::Error| RpcError::Link(error.to_string());
-            let mut stream = BufReader::new((self.open)().await.map_err(lost)?);
+            let mut stream = BufReader::new((self.open)().await?);
             stream
                 .get_mut()
                 .write_all(encode_line(&request).as_bytes())
-                .await
-                .map_err(lost)?;
+                .await?;
             let mut line = String::new();
-            if stream.read_line(&mut line).await.map_err(lost)? == 0 {
-                return Err(RpcError::Link(
-                    "the server closed the stream unanswered".into(),
-                ));
+            if stream.read_line(&mut line).await? == 0 {
+                return Err(RpcError::Unanswered);
             }
-            let response: Response =
-                decode_line(&line).map_err(|error| RpcError::Link(error.to_string()))?;
+            let response: Response = decode_line(&line)?;
             Ok(response?)
         };
         tokio::time::timeout(self.timeout, exchange)
             .await
-            .map_err(|_| RpcError::Link(format!("no answer within {:?}", self.timeout)))?
+            .map_err(|_| RpcError::TimedOut(self.timeout))?
     }
-}
-
-fn unexpected(reply: &Reply) -> RpcError {
-    RpcError::Link(format!("an answer of the wrong kind: {reply:?}"))
 }
 
 #[cfg(test)]
@@ -216,7 +217,10 @@ mod tests {
     async fn a_request_that_times_out_fails_alone() {
         let rpc = scripted(Ok(Reply::Secret(b"t".to_vec())), Duration::from_secs(60));
         let started = Instant::now();
-        assert!(matches!(rpc.read("slow:").await, Err(RpcError::Link(_))));
+        assert!(matches!(
+            rpc.read("slow:").await,
+            Err(RpcError::TimedOut(TIMEOUT))
+        ));
         assert_eq!(started.elapsed(), TIMEOUT);
         assert_eq!(rpc.read("fast:").await.unwrap(), b"t");
     }
@@ -244,27 +248,31 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_stream_closed_without_an_answer_is_a_link_error() {
+    async fn a_stream_closed_without_an_answer_is_unanswered() {
         let rpc = Rpc::new(
             || async {
                 let (client, server) = tokio::io::duplex(1024);
-                drop(server);
+                tokio::spawn(async move {
+                    let mut server = BufReader::new(server);
+                    let mut line = String::new();
+                    server.read_line(&mut line).await.unwrap();
+                });
                 Ok(client)
             },
             TIMEOUT,
         );
         assert!(matches!(
             rpc.read("gh:github.com:").await,
-            Err(RpcError::Link(_))
+            Err(RpcError::Unanswered)
         ));
     }
 
     #[tokio::test]
-    async fn an_answer_of_the_wrong_kind_is_a_link_error() {
+    async fn an_answer_of_the_wrong_kind_is_refused() {
         let rpc = scripted(Ok(Reply::Done), Duration::ZERO);
         assert!(matches!(
             rpc.read("gh:github.com:").await,
-            Err(RpcError::Link(_))
+            Err(RpcError::WrongKind(Reply::Done))
         ));
     }
 }

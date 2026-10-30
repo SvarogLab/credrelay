@@ -72,7 +72,10 @@ pub fn encode_line<T: Serialize>(message: &T) -> String {
     line
 }
 
-pub fn decode_line<T: for<'de> Deserialize<'de>>(line: &str) -> serde_json::Result<T> {
+/// A line that isn't the message it should be.
+pub type DecodeError = serde_json::Error;
+
+pub fn decode_line<T: for<'de> Deserialize<'de>>(line: &str) -> Result<T, DecodeError> {
     serde_json::from_str(line)
 }
 

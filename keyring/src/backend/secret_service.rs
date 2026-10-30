@@ -12,10 +12,10 @@ pub struct SecretService {
 impl SecretService {
     /// Connects to the default collection, unlocking it if the service keeps it locked.
     pub async fn connect() -> Result<Self, BackendError> {
-        let service = Service::new().await.map_err(failed)?;
-        let collection = service.default_collection().await.map_err(failed)?;
-        if collection.is_locked().await.map_err(failed)? {
-            collection.unlock(None).await.map_err(failed)?;
+        let service = Service::new().await?;
+        let collection = service.default_collection().await?;
+        if collection.is_locked().await? {
+            collection.unlock(None).await?;
         }
         Ok(Self { collection })
     }
@@ -25,24 +25,19 @@ fn attributes<'a>(service: &'a str, username: &'a str) -> HashMap<&'a str, &'a s
     HashMap::from([("service", service), ("username", username)])
 }
 
-fn failed(error: oo7::dbus::Error) -> BackendError {
-    BackendError(error.to_string())
-}
-
 impl Backend for SecretService {
     async fn get(&self, service: &str, username: &str) -> Result<Option<Vec<u8>>, BackendError> {
         let found = self
             .collection
             .search_items(&attributes(service, username))
-            .await
-            .map_err(failed)?;
+            .await?;
         let Some(item) = found.first() else {
             return Ok(None);
         };
-        if item.is_locked().await.map_err(failed)? {
-            item.unlock(None).await.map_err(failed)?;
+        if item.is_locked().await? {
+            item.unlock(None).await?;
         }
-        let secret = item.secret().await.map_err(failed)?;
+        let secret = item.secret().await?;
         Ok(Some(secret.as_bytes().to_vec()))
     }
 
@@ -57,8 +52,7 @@ impl Backend for SecretService {
                 true,
                 None,
             )
-            .await
-            .map_err(failed)?;
+            .await?;
         Ok(())
     }
 
@@ -66,10 +60,9 @@ impl Backend for SecretService {
         let found = self
             .collection
             .search_items(&attributes(service, username))
-            .await
-            .map_err(failed)?;
+            .await?;
         for item in &found {
-            item.delete(None).await.map_err(failed)?;
+            item.delete(None).await?;
         }
         Ok(!found.is_empty())
     }
