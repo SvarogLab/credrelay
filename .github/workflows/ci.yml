@@ -1,7 +1,7 @@
-# The workspace is checked on Linux, and the server's Credential Manager side, which only compiles for
+# The workspace is checked on Linux, and its Credential Manager side, which only compiles for
 # Windows, on Windows, where its tests write and delete credentials of their own. A merged
-# `chore: release vX` commit is tagged and released with the client for Linux and the server for
-# Windows, each built on its own arch's runner.
+# `chore: release vX` commit is tagged and released with the Linux and Windows binaries, each built
+# on its own arch's runner.
 name: CI
 
 on:
@@ -18,12 +18,12 @@ jobs:
   rust:
     uses: SvarogLab/.github/.github/workflows/rust.yml@v1
     with:
-      binaries: credrelay-client
-      build-args: -p credrelay-client
+      binaries: credrelay-client credrelay-keyring credrelay-bao-helper
+      build-args: -p credrelay-client -p credrelay-keyring
       # The client's tests run the service on a private bus and read replies back with busctl.
       apt-packages: dbus-daemon systemd
-      windows-args: -p credrelay-wincred -p credrelay-server
-      windows-binaries: credrelay-server
+      windows-args: -p credrelay-wincred -p credrelay-server -p credrelay-keyring
+      windows-binaries: credrelay-server credrelay-keyring credrelay-bao-helper
 
   tag:
     needs: rust
@@ -42,12 +42,20 @@ jobs:
       tag: ${{ needs.tag.outputs.tag }}
       download-binaries: true
       prepare: |
-        cp binaries/amd64/release/credrelay-client credrelay-client-linux-amd64
-        cp binaries/arm64/release/credrelay-client credrelay-client-linux-arm64
-        cp binaries/windows-amd64/release/credrelay-server.exe credrelay-server-windows-amd64.exe
-        cp binaries/windows-arm64/release/credrelay-server.exe credrelay-server-windows-arm64.exe
-        sha256sum credrelay-client-linux-* credrelay-server-windows-* > SHA256SUMS
+        for arch in amd64 arm64; do
+          for bin in credrelay-client credrelay-keyring credrelay-bao-helper; do
+            cp "binaries/$arch/release/$bin" "$bin-linux-$arch"
+          done
+          for bin in credrelay-server credrelay-keyring credrelay-bao-helper; do
+            cp "binaries/windows-$arch/release/$bin.exe" "$bin-windows-$arch.exe"
+          done
+        done
+        sha256sum credrelay-*-linux-* credrelay-*-windows-* > SHA256SUMS
       assets: >-
         credrelay-client-linux-amd64 credrelay-client-linux-arm64
+        credrelay-keyring-linux-amd64 credrelay-keyring-linux-arm64
+        credrelay-bao-helper-linux-amd64 credrelay-bao-helper-linux-arm64
         credrelay-server-windows-amd64.exe credrelay-server-windows-arm64.exe
+        credrelay-keyring-windows-amd64.exe credrelay-keyring-windows-arm64.exe
+        credrelay-bao-helper-windows-amd64.exe credrelay-bao-helper-windows-arm64.exe
         SHA256SUMS
