@@ -491,6 +491,47 @@ async fn a_dh_session_sends_and_receives_encrypted_secrets() {
     );
 }
 
+/// A client that disconnects without closing its sessions mustn't leave them behind.
+#[tokio::test]
+async fn a_disconnected_clients_sessions_are_dropped() {
+    let fixture = Fixture::start().await;
+    let item = fixture.set("gh:github.com", "", "t0ken").await.unwrap();
+    let other = fixture.bus.connect().await;
+    let (_, session): (OwnedVariant, OwnedObjectPath) = other
+        .call_method(
+            Some(BUS_NAME),
+            SERVICE_PATH,
+            Some(SERVICE),
+            "OpenSession",
+            &("plain", Variant::from("")),
+        )
+        .await
+        .unwrap()
+        .body()
+        .deserialize()
+        .unwrap();
+    drop(other);
+
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(5);
+    loop {
+        let read = fixture
+            .call::<_, (WireSecret,)>(item.as_str(), ITEM, "GetSecret", &(&session,))
+            .await;
+        match read {
+            Err(zbus::Error::MethodError(name, _, _))
+                if name.as_str() == "org.freedesktop.Secret.Error.NoSession" =>
+            {
+                break;
+            }
+            other => assert!(
+                tokio::time::Instant::now() < deadline,
+                "the session outlived its client: {other:?}"
+            ),
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+}
+
 #[tokio::test]
 async fn a_secret_for_a_closed_session_is_refused() {
     let fixture = Fixture::start().await;

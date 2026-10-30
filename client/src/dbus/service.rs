@@ -1,11 +1,12 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use zbus::message::Header;
 use zbus::object_server::ObjectServer;
 use zbus::{OwnedObjectPath, OwnedVariant, Variant, interface};
 
 use super::session::SessionObject;
-use super::{Error, LOGIN_PATH, NO_PROMPT, Secret, State, item};
+use super::{Error, LOGIN_PATH, NO_PROMPT, Secret, Session, State, item};
 use crate::encoding::{self, Encoding};
 use crate::schemes::Attributes;
 
@@ -26,7 +27,12 @@ impl Service {
         algorithm: &str,
         input: OwnedVariant,
         #[zbus(object_server)] server: &ObjectServer,
+        #[zbus(header)] header: Header<'_>,
     ) -> Result<(OwnedVariant, OwnedObjectPath), Error> {
+        let owner = header
+            .sender()
+            .map(|sender| sender.to_string())
+            .ok_or_else(|| Error::InvalidArgs("a session needs a sender to belong to".into()))?;
         let input = match algorithm {
             encoding::PLAIN => Vec::new(),
             _ => {
@@ -39,11 +45,13 @@ impl Service {
             Encoding::Aes(_) => OwnedVariant::try_from(Variant::from(output)),
         }?;
         let path = self.state.new_session_path();
-        self.state
-            .sessions
-            .lock()
-            .unwrap()
-            .insert(path.clone(), Arc::new(encoding));
+        self.state.sessions.lock().unwrap().insert(
+            path.clone(),
+            Session {
+                encoding: Arc::new(encoding),
+                owner,
+            },
+        );
         server
             .at(&path, SessionObject::new(self.state.clone(), path.clone()))
             .await?;

@@ -12,6 +12,8 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
+use futures::StreamExt;
+
 use serde::{Deserialize, Serialize};
 use zbus::object_server::ObjectServer;
 use zbus::{OwnedObjectPath, Type};
@@ -40,23 +42,70 @@ pub async fn serve(
         sessions: Mutex::default(),
         next_session: AtomicU64::new(0),
     });
-    builder
+    let connection = builder
         .serve_at(SERVICE_PATH, service::Service::new(state.clone()))
         .serve_at(LOGIN_PATH, collection::Collection::new(state.clone()))
-        .serve_at(DEFAULT_ALIAS_PATH, collection::Collection::new(state))
+        .serve_at(DEFAULT_ALIAS_PATH, collection::Collection::new(state.clone()))
         // zbus would otherwise take the name from an instance already serving, and let the next
         // one take it from this.
         .replace_existing_names(false)
         .allow_name_replacements(false)
         .name(BUS_NAME)
         .build()
-        .await
+        .await?;
+    let departures = zbus::fdo::DBusProxy::new(&connection)
+        .await?
+        .receive_name_owner_changed()
+        .await?;
+    tokio::spawn(close_sessions_of_departed(
+        departures,
+        state,
+        connection.clone(),
+    ));
+    Ok(connection)
+}
+
+/// Closes the sessions of every client that leaves the bus: a client needn't close its sessions,
+/// and one that doesn't would otherwise leave them open for as long as the service runs.
+async fn close_sessions_of_departed(
+    mut departures: zbus::fdo::NameOwnerChangedStream,
+    state: Arc<State>,
+    connection: zbus::Connection,
+) {
+    while let Some(change) = departures.next().await {
+        let Ok(args) = change.args() else { continue };
+        if args.new_owner().is_some() || !args.name().starts_with(':') {
+            continue;
+        }
+        let departed = args.name().to_string();
+        let closed: Vec<OwnedObjectPath> = {
+            let mut sessions = state.sessions.lock().unwrap();
+            let closed = sessions
+                .iter()
+                .filter(|(_, session)| session.owner == departed)
+                .map(|(path, _)| path.clone())
+                .collect::<Vec<_>>();
+            for path in &closed {
+                sessions.remove(path);
+            }
+            closed
+        };
+        for path in closed {
+            unexport::<session::SessionObject>(&connection, path);
+        }
+    }
+}
+
+/// A session: how secrets cross the bus in it, and the client that opened it.
+struct Session {
+    encoding: Arc<Encoding>,
+    owner: String,
 }
 
 /// What every exported object shares.
 struct State {
     keyring: Keyring,
-    sessions: Mutex<HashMap<OwnedObjectPath, Arc<Encoding>>>,
+    sessions: Mutex<HashMap<OwnedObjectPath, Session>>,
     next_session: AtomicU64,
 }
 
@@ -66,7 +115,7 @@ impl State {
             .lock()
             .unwrap()
             .get(session)
-            .cloned()
+            .map(|session| session.encoding.clone())
             .ok_or_else(|| Error::NoSession(session.to_string()))
     }
 
