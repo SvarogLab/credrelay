@@ -1,0 +1,24 @@
+[package]
+name = "credrelay-server"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+repository.workspace = true
+description.workspace = true
+
+[[bin]]
+name = "credrelay-server"
+path = "src/main.rs"
+
+[dependencies]
+credrelay-protocol = { workspace = true }
+clap = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true }
+
+[dev-dependencies]
+credrelay-protocol = { workspace = true, features = ["memory"] }
