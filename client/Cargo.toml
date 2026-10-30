@@ -18,6 +18,7 @@ test-support = ["credrelay-protocol/memory"]
 [dependencies]
 librelay = { workspace = true, features = ["client"] }
 credrelay-protocol = { workspace = true }
+credrelay-wincred = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 zbus = { workspace = true }

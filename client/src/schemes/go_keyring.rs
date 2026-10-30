@@ -7,6 +7,8 @@
 
 use credrelay_protocol::Credential;
 
+use credrelay_wincred::go_keyring_target;
+
 use super::{Attributes, Scheme};
 use crate::prefixes::Prefixes;
 
@@ -38,7 +40,7 @@ impl Scheme for GoKeyring {
             return None;
         }
         Some(Credential {
-            target: format!("{service}:{username}"),
+            target: go_keyring_target(service, username),
             username: username.clone(),
         })
     }
