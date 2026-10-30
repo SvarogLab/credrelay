@@ -132,6 +132,18 @@ struct Secret {
     content_type: String,
 }
 
+/// Removes the object at `path` once the method running on it has returned, since the object
+/// server can't drop an interface while one of its methods still holds it.
+fn unexport<I: zbus::object_server::Interface>(
+    connection: &zbus::Connection,
+    path: OwnedObjectPath,
+) {
+    let connection = connection.clone();
+    tokio::spawn(async move {
+        let _ = connection.object_server().remove::<I, _>(&path).await;
+    });
+}
+
 #[derive(Debug, zbus::DBusError)]
 #[zbus(prefix = "org.freedesktop")]
 enum Error {

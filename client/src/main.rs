@@ -64,7 +64,7 @@ async fn run(config: Config, server_args: [String; 2]) -> Result<(), String> {
     );
     // One answered request before taking the bus name: a client that starts serving with a server
     // that can't answer would fail every application that calls it.
-    rpc.list("credrelay:")
+    rpc.list(schemes::NATIVE_PREFIX)
         .await
         .map_err(|error| format!("credrelay-server isn't answering: {error}"))?;
 

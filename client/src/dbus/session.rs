@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use zbus::{Connection, OwnedObjectPath, interface};
 
-use super::State;
+use super::{State, unexport};
 
 pub struct SessionObject {
     state: Arc<State>,
@@ -19,14 +19,6 @@ impl SessionObject {
 impl SessionObject {
     async fn close(&self, #[zbus(connection)] connection: &Connection) {
         self.state.sessions.lock().unwrap().remove(&self.path);
-        // Removed once this method has returned, as an item is; see `item::unexport`.
-        let connection = connection.clone();
-        let path = self.path.clone();
-        tokio::spawn(async move {
-            let _ = connection
-                .object_server()
-                .remove::<SessionObject, _>(&path)
-                .await;
-        });
+        unexport::<Self>(connection, self.path.clone());
     }
 }

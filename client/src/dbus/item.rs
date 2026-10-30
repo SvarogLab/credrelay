@@ -4,7 +4,7 @@ use std::sync::Arc;
 use zbus::object_server::ObjectServer;
 use zbus::{Connection, OwnedObjectPath, interface};
 
-use super::{Error, LOGIN_PATH, NO_PROMPT, Secret, State};
+use super::{Error, LOGIN_PATH, NO_PROMPT, Secret, State, unexport};
 use crate::keyring::Item;
 use crate::schemes::Attributes;
 
@@ -51,7 +51,7 @@ impl ItemObject {
         #[zbus(connection)] connection: &Connection,
     ) -> Result<OwnedObjectPath, Error> {
         self.state.keyring.delete(&self.item).await?;
-        unexport(connection, self.path.clone());
+        unexport::<Self>(connection, self.path.clone());
         Ok(OwnedObjectPath::try_from(NO_PROMPT)?)
     }
 
@@ -96,18 +96,6 @@ impl ItemObject {
     fn modified(&self) -> u64 {
         0
     }
-}
-
-/// Removes the object at `path` once the method running on it has returned, since the object
-/// server can't drop an interface while one of its methods still holds it.
-pub(super) fn unexport(connection: &Connection, path: OwnedObjectPath) {
-    let connection = connection.clone();
-    tokio::spawn(async move {
-        let _ = connection
-            .object_server()
-            .remove::<ItemObject, _>(&path)
-            .await;
-    });
 }
 
 #[cfg(test)]

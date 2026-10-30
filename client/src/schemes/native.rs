@@ -14,7 +14,8 @@ use percent_encoding::{AsciiSet, NON_ALPHANUMERIC, percent_decode_str, utf8_perc
 use super::{Attributes, Scheme};
 use crate::schemes::Prefixes;
 
-const PREFIX: &str = "credrelay:";
+/// The prefix every credential this scheme stores starts with.
+pub const PREFIX: &str = "credrelay:";
 const PAIRS: char = ';';
 const KEY_VALUE: char = ',';
 const RESERVED: &AsciiSet = &NON_ALPHANUMERIC
