@@ -101,7 +101,7 @@ mod tests {
             &[
                 ("xdg:schema", "org.freedesktop.Secret.Generic"),
                 ("a&b", "c=d"),
-                ("unicode", "пароль"),
+                ("unicode", "mot de passe ✓"),
                 ("empty", ""),
             ],
         ] {
