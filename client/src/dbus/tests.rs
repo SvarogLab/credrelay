@@ -1,14 +1,12 @@
 //! The service on a private bus of its own, driven the way its clients drive it.
 
 use std::collections::HashMap;
-use std::process::Stdio;
 
-use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::process::{Child, Command};
+use tokio::process::Command;
 use zbus::{Connection, OwnedObjectPath, OwnedVariant, Variant};
 
 use super::*;
-use crate::test_support::{attributes, keyring};
+use crate::test_support::{Bus, attributes, keyring};
 
 /// A secret as clients read it: one `(oayays)` argument, not four.
 type WireSecret = (OwnedObjectPath, Vec<u8>, Vec<u8>, String);
@@ -17,39 +15,6 @@ const SERVICE: &str = "org.freedesktop.Secret.Service";
 const COLLECTION: &str = "org.freedesktop.Secret.Collection";
 const ITEM: &str = "org.freedesktop.Secret.Item";
 const SESSION: &str = "org.freedesktop.Secret.Session";
-
-/// A `dbus-daemon` with a session bus configuration, gone when dropped.
-struct Bus {
-    _daemon: Child,
-    address: String,
-}
-
-impl Bus {
-    async fn start() -> Self {
-        let mut daemon = Command::new("dbus-daemon")
-            .args(["--session", "--nofork", "--print-address=1"])
-            .stdout(Stdio::piped())
-            .kill_on_drop(true)
-            .spawn()
-            .expect("dbus-daemon must be installed to run these tests");
-        let mut address = String::new();
-        BufReader::new(daemon.stdout.take().unwrap())
-            .read_line(&mut address)
-            .await
-            .unwrap();
-        Self {
-            _daemon: daemon,
-            address: address.trim().to_owned(),
-        }
-    }
-
-    async fn connect(&self) -> Connection {
-        zbus::connection::Builder::address(self.address.as_str())
-            .build()
-            .await
-            .unwrap()
-    }
-}
 
 /// A served keyring and a client connection to it.
 struct Fixture {
@@ -65,12 +30,9 @@ impl Fixture {
 
     async fn start_with(keyring: Keyring) -> Self {
         let bus = Bus::start().await;
-        let service = serve(
-            zbus::connection::Builder::address(bus.address.as_str()),
-            keyring,
-        )
-        .await
-        .unwrap();
+        let service = serve(zbus::connection::Builder::address(bus.address()), keyring)
+            .await
+            .unwrap();
         let client = bus.connect().await;
         Self {
             bus,
@@ -112,7 +74,7 @@ impl Fixture {
         args: &[&str],
     ) -> String {
         let output = Command::new("busctl")
-            .arg(format!("--address={}", self.bus.address))
+            .arg(format!("--address={}", self.bus.address()))
             .args(["call", BUS_NAME, path, interface, method])
             .args(args)
             .output()
@@ -250,7 +212,7 @@ impl Fixture {
 async fn a_stopped_service_gives_up_its_name() {
     let fixture = Fixture::start().await;
     fixture.set("gh:github.com", "", "t0ken").await.unwrap();
-    let address = fixture.bus.address.clone();
+    let address = fixture.bus.address().to_owned();
     let Fixture { bus, service, .. } = fixture;
     tokio::time::timeout(std::time::Duration::from_secs(10), service.stop())
         .await
@@ -270,7 +232,7 @@ async fn a_stopped_service_gives_up_its_name() {
 async fn a_second_instance_fails_and_the_first_keeps_the_name() {
     let fixture = Fixture::start().await;
     let second = serve(
-        zbus::connection::Builder::address(fixture.bus.address.as_str()),
+        zbus::connection::Builder::address(fixture.bus.address()),
         keyring(),
     )
     .await;

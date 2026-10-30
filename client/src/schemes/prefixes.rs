@@ -40,7 +40,7 @@ mod tests {
     use super::*;
 
     fn prefixes(prefixes: &[&str]) -> Prefixes {
-        Prefixes::new(prefixes.iter().map(|p| p.to_string()).collect()).unwrap()
+        Prefixes::new(prefixes.iter().map(ToString::to_string).collect()).unwrap()
     }
 
     #[test]

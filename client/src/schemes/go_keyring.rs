@@ -69,13 +69,7 @@ impl Scheme for GoKeyring {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn attributes(pairs: &[(&str, &str)]) -> Attributes {
-        pairs
-            .iter()
-            .map(|(key, value)| (key.to_string(), value.to_string()))
-            .collect()
-    }
+    use crate::test_support::attributes;
 
     fn scheme() -> GoKeyring {
         GoKeyring::new(Prefixes::new(vec!["gh:".into(), "glab:".into()]).unwrap())

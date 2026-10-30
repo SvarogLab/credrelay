@@ -98,13 +98,7 @@ fn decode(text: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn attributes(pairs: &[(&str, &str)]) -> Attributes {
-        pairs
-            .iter()
-            .map(|(key, value)| (key.to_string(), value.to_string()))
-            .collect()
-    }
+    use crate::test_support::attributes;
 
     #[test]
     fn claims_any_attributes_and_reads_them_back_from_the_target() {
