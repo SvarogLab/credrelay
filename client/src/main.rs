@@ -1,3 +1,4 @@
+use std::io;
 use std::process::ExitCode;
 use std::time::Duration;
 
@@ -10,7 +11,9 @@ use credrelay_client::rpc::Rpc;
 use credrelay_client::schemes;
 use librelay::client::lifecycle::{self, Died};
 use librelay::client::log::{self, LogFilter};
+use librelay::client::mux;
 use librelay::client::spawn::Server;
+use tokio_util::compat::FuturesAsyncReadCompatExt;
 
 #[tokio::main]
 async fn main() -> ExitCode {
@@ -47,9 +50,16 @@ async fn run(config: Config, server_args: [String; 2]) -> Result<(), String> {
         tokio::io::stderr(),
     ));
 
+    let (mux, driver) = mux::client(tokio::io::join(server.stdout, server.stdin));
+    let mut driver = tokio::spawn(driver);
     let rpc = Rpc::new(
-        server.stdout,
-        server.stdin,
+        move || {
+            let mux = mux.clone();
+            async move {
+                let stream = mux.open_stream().await.map_err(io::Error::other)?;
+                Ok(stream.compat())
+            }
+        },
         Duration::from_secs(config.request_timeout_secs),
     );
     // One answered request before taking the bus name: a client that starts serving with a server
@@ -58,18 +68,21 @@ async fn run(config: Config, server_args: [String; 2]) -> Result<(), String> {
         .await
         .map_err(|error| format!("credrelay-server isn't answering: {error}"))?;
 
-    let keyring = Keyring::new(rpc.clone(), schemes::all(go_keyring));
+    let keyring = Keyring::new(rpc, schemes::all(go_keyring));
     let builder = zbus::connection::Builder::session();
     let _connection = dbus::serve(builder, keyring)
         .await
         .map_err(|error| format!("can't serve {}: {error}", dbus::BUS_NAME))?;
     tracing::info!("serving {}", dbus::BUS_NAME);
 
-    match lifecycle::died(&mut server.child, rpc.broken()).await {
-        Died::Exited(Ok(status)) => Err(format!("credrelay-server exited: {status}")),
-        Died::Exited(Err(error)) => Err(format!("can't wait for credrelay-server: {error}")),
-        Died::TransportEnded => {
-            Err("the link to credrelay-server broke; exiting to start afresh".into())
+    match lifecycle::died(&mut server.child, &mut driver).await {
+        Died::Exited(status) => {
+            driver.abort();
+            match status {
+                Ok(status) => Err(format!("credrelay-server exited: {status}")),
+                Err(error) => Err(format!("can't wait for credrelay-server: {error}")),
+            }
         }
+        Died::TransportEnded => Err("the link to credrelay-server ended".into()),
     }
 }

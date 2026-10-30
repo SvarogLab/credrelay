@@ -23,7 +23,7 @@ pub struct Config {
     pub go_keyring_prefixes: Vec<String>,
 
     /// How long credrelay-server may take to answer one request, in seconds. A request it doesn't
-    /// answer in time leaves the link out of step, so the client exits for systemd to restart.
+    /// answer in time fails; the others, each on a stream of its own, carry on.
     #[arg(long, default_value_t = 10)]
     pub request_timeout_secs: u64,
 }

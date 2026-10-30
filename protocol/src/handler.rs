@@ -1,4 +1,4 @@
-use crate::{CredentialStore, Reply, Request, Response};
+use crate::{CredentialStore, Reply, Request, Response, decode_line, encode_line};
 
 /// Answers one request from `store`.
 pub fn handle(store: &impl CredentialStore, request: Request) -> Response {
@@ -14,6 +14,13 @@ pub fn handle(store: &impl CredentialStore, request: Request) -> Response {
         Request::Delete { target } => store.delete(&target).map(|()| Reply::Done),
         Request::List { prefix } => store.list(&prefix).map(Reply::Credentials),
     }
+}
+
+/// Answers one request line with one answer line, newline included. A line that isn't a request
+/// gets no answer: the client never sends one.
+pub fn answer(store: &impl CredentialStore, line: &str) -> serde_json::Result<String> {
+    let request: Request = decode_line(line)?;
+    Ok(encode_line(&handle(store, request)))
 }
 
 #[cfg(test)]
@@ -33,6 +40,14 @@ mod tests {
         Request::Read {
             target: target.into(),
         }
+    }
+
+    #[test]
+    fn a_request_line_gets_its_answer_line() {
+        let store = MemoryStore::default();
+        let line = answer(&store, r#"{"op":"read","target":"gh:github.com:"}"#).unwrap();
+        assert_eq!(line, "{\"Err\":\"not_found\"}\n");
+        assert!(answer(&store, "not json").is_err());
     }
 
     #[test]

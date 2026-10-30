@@ -19,6 +19,7 @@ test-support = ["credrelay-protocol/memory"]
 librelay = { workspace = true, features = ["client"] }
 credrelay-protocol = { workspace = true }
 tokio = { workspace = true }
+tokio-util = { workspace = true }
 zbus = { workspace = true }
 num-bigint = { workspace = true }
 hkdf = { workspace = true }

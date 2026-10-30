@@ -1,6 +1,9 @@
 //! A keyring backed by memory instead of credrelay-server, for tests here and in other crates.
 
-use credrelay_protocol::{MemoryStore, decode_line, encode_line, handle};
+use std::sync::Arc;
+use std::time::Duration;
+
+use credrelay_protocol::{MemoryStore, answer};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
 use crate::keyring::Keyring;
@@ -8,27 +11,28 @@ use crate::prefixes::Prefixes;
 use crate::rpc::Rpc;
 use crate::schemes::{self, Attributes};
 
-/// An `Rpc` whose far end answers in-process from a [`MemoryStore`], with the server's own request
-/// handler.
+/// An `Rpc` whose every stream is answered in-process from one [`MemoryStore`], with the server's
+/// own request handler.
 pub fn in_memory() -> Rpc {
-    let (client, server) = tokio::io::duplex(64 * 1024);
-    let (client_reader, client_writer) = tokio::io::split(client);
-    tokio::spawn(async move {
-        let store = MemoryStore::default();
-        let (server_reader, mut server_writer) = tokio::io::split(server);
-        let mut lines = BufReader::new(server_reader).lines();
-        while let Ok(Some(line)) = lines.next_line().await {
-            let response = handle(&store, decode_line(&line).unwrap());
-            let encoded = encode_line(&response);
-            if server_writer.write_all(encoded.as_bytes()).await.is_err() {
-                break;
-            }
-        }
-    });
+    let store = Arc::new(MemoryStore::default());
     Rpc::new(
-        client_reader,
-        client_writer,
-        std::time::Duration::from_secs(10),
+        move || {
+            let store = store.clone();
+            async move {
+                let (client, server) = tokio::io::duplex(64 * 1024);
+                tokio::spawn(async move {
+                    let mut server = BufReader::new(server);
+                    let mut line = String::new();
+                    if server.read_line(&mut line).await.is_ok()
+                        && let Ok(answer) = answer(&*store, &line)
+                    {
+                        let _ = server.get_mut().write_all(answer.as_bytes()).await;
+                    }
+                });
+                Ok(client)
+            }
+        },
+        Duration::from_secs(10),
     )
 }
 

@@ -1,7 +1,5 @@
-//! What `credrelay-client` and `credrelay-server` say to each other over the server's stdio: one
-//! JSON [`Request`] per line in, one JSON [`Response`] per line out, strictly in turn.
-//!
-//! JSON lines rather than a binary framing so the server can be driven by hand for testing.
+//! What `credrelay-client` and `credrelay-server` say on each stream of the connection between
+//! them: one JSON [`Request`] line from the client, one JSON [`Response`] line back.
 
 mod handler;
 #[cfg(any(test, feature = "memory"))]
@@ -9,7 +7,7 @@ mod memory;
 
 use serde::{Deserialize, Serialize};
 
-pub use handler::handle;
+pub use handler::{answer, handle};
 #[cfg(any(test, feature = "memory"))]
 pub use memory::MemoryStore;
 

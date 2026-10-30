@@ -19,19 +19,21 @@ their own, apart from the Windows one.
 ## Architecture
 
 - **`credrelay-client`** (WSL/Linux) owns `org.freedesktop.secrets` on the session bus. At startup it
-  starts **`credrelay-server.exe`** exactly once and sends it every credential request over that
-  process's stdin/stdout. Starting one Windows process per request would run into a WSL interop bug
-  under load ([microsoft/WSL #7371](https://github.com/microsoft/WSL/issues/7371)). If the server
-  exits, the client exits too rather than restarting it; systemd restarts the client.
+  starts **`credrelay-server.exe`** exactly once and multiplexes every credential request over that
+  process's stdin/stdout with [`yamux`](https://docs.rs/yamux), one stream per request, so requests
+  run side by side and a slow one holds up no other. Starting one Windows process per request would
+  run into a WSL interop bug under load ([microsoft/WSL #7371](https://github.com/microsoft/WSL/issues/7371)).
+  Before taking the bus name the client asks the server one question, so a server that can't answer
+  never serves. If the server exits or the connection to it ends, the client exits too rather than
+  restarting it; systemd restarts the client. The spawning, the multiplexing, the logging and this
+  lifecycle come from [`librelay`](https://github.com/SvarogLab/librelay), shared with
+  [`sockrelay`](https://github.com/SvarogLab/sockrelay).
 - **`credrelay-server.exe`** (Windows, cross-compiled; WSL runs it natively) reads, writes, deletes
   and lists generic credentials with `CredReadW`, `CredWriteW`, `CredDeleteW` and `CredEnumerateW`.
   It knows nothing about the Secret Service.
-- **`credrelay-protocol`** is what the two say to each other: one JSON request per line, one JSON
-  response per line, strictly in turn, so the server can be driven by hand:
-
-  ```sh
-  echo '{"op":"list","prefix":"gh:"}' | credrelay-server.exe --log-filter info
-  ```
+- **`credrelay-protocol`** is what the two say on each stream: one JSON request line from the client,
+  one JSON answer line back, for example `{"op":"list","prefix":"gh:"}` and
+  `{"Ok":{"credentials":[…]}}`.
 
 - **`credrelay-keyring`** and **`credrelay-bao-helper`** (Linux and Windows) read and write one
   secret under go-keyring's names: through the Secret Service on Linux, in the Credential Manager
@@ -90,10 +92,8 @@ credrelay-client
   --request-timeout-secs <N>      default: 10
 ```
 
-`--request-timeout-secs` bounds how long the server may take to answer one request. Requests go one
-at a time and carry no ids, so a request that isn't answered in time, or that its caller abandons
-halfway, leaves the link out of step: every later call then fails at once, and the client exits for
-systemd to restart it with a fresh server.
+`--request-timeout-secs` bounds how long the server may take to answer one request. A request that
+isn't answered in time fails on its own; the others, each on its own stream, carry on.
 
 ### `credrelay-server`
 

@@ -12,6 +12,8 @@ name = "credrelay-server"
 path = "src/main.rs"
 
 [dependencies]
+tokio = { workspace = true }
+tokio-util = { workspace = true }
 librelay = { workspace = true, features = ["server"] }
 credrelay-protocol = { workspace = true }
 clap = { workspace = true }

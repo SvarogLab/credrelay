@@ -3,7 +3,7 @@ use librelay::server::log::LogArgs;
 
 #[derive(Parser, Debug)]
 #[command(
-    about = "credrelay Windows side: answers credential requests on stdio from the Windows Credential Manager.\n\nNot meant to be run directly by an end user: credrelay-client spawns it, passes every flag below, and speaks JSON lines over its stdin/stdout. Which credentials may be touched is decided there."
+    about = "credrelay Windows side: answers credential requests on stdio from the Windows Credential Manager.\n\nNot meant to be run directly by an end user: credrelay-client spawns it, passes every flag below, and opens one yamux stream over its stdin/stdout per request. Which credentials may be touched is decided there."
 )]
 // Every flag is required, with no default: credrelay-client passes them all.
 pub struct Config {
