@@ -5,6 +5,9 @@ Description=Secret Service backed by the Windows Credential Manager
 Type=dbus
 BusName=org.freedesktop.secrets
 ExecStart=@BINDIR@/credrelay-client
+# SIGTERM to the client alone: it closes the link and the server exits on its own. The default
+# would signal the server at the same moment and cut that short.
+KillMode=mixed
 Restart=on-failure
 # A client that fails at once fails again at once; a pause keeps systemd from giving up too soon.
 RestartSec=2
