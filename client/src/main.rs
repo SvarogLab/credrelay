@@ -54,6 +54,12 @@ async fn run(config: Config, log_filter: String) -> Result<(), String> {
         server.stdin,
         Duration::from_secs(config.request_timeout_secs),
     );
+    // One answered request before taking the bus name: a client that starts serving with a server
+    // that can't answer would fail every application that calls it.
+    rpc.list("credrelay:")
+        .await
+        .map_err(|error| format!("credrelay-server isn't answering: {error}"))?;
+
     let keyring = Keyring::new(rpc.clone(), schemes::all(go_keyring));
     let builder = zbus::connection::Builder::session();
     let _connection = dbus::serve(builder, keyring)
@@ -61,10 +67,13 @@ async fn run(config: Config, log_filter: String) -> Result<(), String> {
         .map_err(|error| format!("can't serve {}: {error}", dbus::BUS_NAME))?;
     tracing::info!("serving {}", dbus::BUS_NAME);
 
-    let status = server
-        .child
-        .wait()
-        .await
-        .map_err(|error| error.to_string())?;
-    Err(format!("credrelay-server exited: {status}"))
+    tokio::select! {
+        status = server.child.wait() => {
+            let status = status.map_err(|error| error.to_string())?;
+            Err(format!("credrelay-server exited: {status}"))
+        }
+        () = rpc.broken() => {
+            Err("the link to credrelay-server broke; exiting to start afresh".into())
+        }
+    }
 }
