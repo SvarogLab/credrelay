@@ -20,7 +20,7 @@ pub const MAX_SECRET_LEN: usize = CRED_MAX_CREDENTIAL_BLOB_SIZE as usize;
 pub enum WinCredError {
     #[error("no such credential")]
     NotFound,
-    #[error("the secret is {len} bytes; a Windows credential holds at most {MAX_SECRET_LEN}")]
+    #[error("the secret is {len} bytes; a Windows credential holds at most {MAX_SECRET_LEN} bytes")]
     TooLarge { len: usize },
     #[error(transparent)]
     Os(#[from] io::Error),
