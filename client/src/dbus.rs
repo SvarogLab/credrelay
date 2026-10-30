@@ -36,7 +36,7 @@ const NO_PROMPT: &str = "/";
 pub async fn serve(
     builder: zbus::connection::Builder<'_>,
     keyring: Keyring,
-) -> zbus::Result<zbus::Connection> {
+) -> zbus::Result<Serving> {
     let state = Arc::new(State {
         keyring,
         sessions: Mutex::default(),
@@ -57,12 +57,33 @@ pub async fn serve(
         .await?
         .receive_name_owner_changed()
         .await?;
-    tokio::spawn(close_sessions_of_departed(
+    let watcher = tokio::spawn(close_sessions_of_departed(
         departures,
         state,
         connection.clone(),
     ));
-    Ok(connection)
+    Ok(Serving {
+        connection,
+        watcher,
+    })
+}
+
+/// The service on the bus, until [`Serving::stop`].
+pub struct Serving {
+    connection: zbus::Connection,
+    watcher: tokio::task::JoinHandle<()>,
+}
+
+impl Serving {
+    /// Gives up the bus name, so no new calls arrive, and returns once the calls in flight are
+    /// answered. Everything the service held, the link to the server included, is released then.
+    pub async fn stop(self) {
+        let _ = self.connection.release_name(BUS_NAME).await;
+        // The watcher holds a copy of the connection, which shutting down waits for.
+        self.watcher.abort();
+        let _ = self.watcher.await;
+        self.connection.graceful_shutdown().await;
+    }
 }
 
 /// Closes the sessions of every client that leaves the bus: a client needn't close its sessions,

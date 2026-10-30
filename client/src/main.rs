@@ -1,5 +1,5 @@
 use std::io;
-use std::process::ExitCode;
+use std::process::{ExitCode, ExitStatus};
 use std::time::Duration;
 
 use clap::Parser;
@@ -10,24 +10,26 @@ use credrelay_client::rpc::{Rpc, RpcError};
 use credrelay_client::schemes;
 use librelay::client::lifecycle::{self, Died};
 use librelay::client::log::{self, LogFilter};
-use librelay::client::mux;
-use librelay::client::spawn::{Server, SpawnError};
+use librelay::client::relay::{self, CloseError, StartError};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
+
+/// How long the server gets to exit on its own once the client has closed the connection.
+const CLOSE_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Debug, thiserror::Error)]
 enum RunError {
     #[error(transparent)]
-    Spawn(#[from] SpawnError),
+    Start(#[from] StartError),
     #[error("credrelay-server isn't answering: {0}")]
     NotAnswering(RpcError),
     #[error("can't serve org.freedesktop.secrets: {0}")]
     Serve(zbus::Error),
-    #[error("credrelay-server exited: {0}")]
-    ServerExited(std::process::ExitStatus),
-    #[error("can't wait for credrelay-server: {0}")]
-    Wait(io::Error),
-    #[error("the connection to credrelay-server ended")]
-    LinkEnded,
+    #[error("can't listen for a signal to stop: {0}")]
+    Signal(io::Error),
+    #[error("{0}")]
+    Died(Died),
+    #[error("credrelay-server didn't stop: {0}")]
+    Close(#[from] CloseError),
 }
 
 #[tokio::main]
@@ -44,7 +46,10 @@ async fn main() -> ExitCode {
     log::init(filter);
 
     match run(config, server_args).await {
-        Ok(()) => ExitCode::SUCCESS,
+        Ok(status) => {
+            tracing::info!(server = %status, "stopped");
+            ExitCode::SUCCESS
+        }
         Err(e) => {
             tracing::error!(error = %e, "stopped serving");
             ExitCode::FAILURE
@@ -52,21 +57,15 @@ async fn main() -> ExitCode {
     }
 }
 
-/// Serves until the server exits or the connection to it ends. There is no restarting it here:
-/// either way every later request would fail, so this process exits and its supervisor starts both
-/// afresh.
-async fn run(config: Config, server_args: Vec<String>) -> Result<(), RunError> {
-    let mut server = Server::spawn(config.server_exe.clone(), server_args).await?;
-    tokio::spawn(log::forward_server_stderr(
-        server.stderr,
-        tokio::io::stderr(),
-    ));
-
-    let (mux, driver) = mux::client(tokio::io::join(server.stdout, server.stdin));
-    let mut driver = tokio::spawn(driver);
+/// Serves until told to stop, or until the server exits or the connection to it ends. There is no
+/// restarting the server here: every later request would fail, so this process exits and its
+/// supervisor starts both afresh.
+async fn run(config: Config, server_args: Vec<String>) -> Result<ExitStatus, RunError> {
+    let (handle, mut link) = relay::start(config.server_exe.clone(), server_args, None).await?;
+    let opener = handle.clone();
     let rpc = Rpc::new(
         move || {
-            let mux = mux.clone();
+            let mux = opener.clone();
             async move {
                 let stream = mux.open_stream().await.map_err(io::Error::other)?;
                 Ok(stream.compat())
@@ -81,17 +80,16 @@ async fn run(config: Config, server_args: Vec<String>) -> Result<(), RunError> {
         .map_err(RunError::NotAnswering)?;
 
     let keyring = Keyring::new(rpc, schemes::all(config.go_keyring_prefixes()));
-    let builder = zbus::connection::Builder::session();
-    let _connection = dbus::serve(builder, keyring)
+    let serving = dbus::serve(zbus::connection::Builder::session(), keyring)
         .await
         .map_err(RunError::Serve)?;
     tracing::info!("serving {}", dbus::BUS_NAME);
 
-    match lifecycle::died(&mut server.child, &mut driver).await {
-        Died::Exited(status) => {
-            driver.abort();
-            Err(status.map_or_else(RunError::Wait, RunError::ServerExited))
-        }
-        Died::TransportEnded => Err(RunError::LinkEnded),
+    tokio::select! {
+        died = link.died() => return Err(RunError::Died(died)),
+        signal = lifecycle::shutdown_signal() => signal.map_err(RunError::Signal)?,
     }
+    tracing::info!("stopping");
+    serving.stop().await;
+    Ok(link.close(handle, CLOSE_TIMEOUT).await?)
 }

@@ -54,7 +54,7 @@ impl Bus {
 /// A served keyring and a client connection to it.
 struct Fixture {
     bus: Bus,
-    _service: Connection,
+    service: Serving,
     client: Connection,
 }
 
@@ -70,7 +70,7 @@ impl Fixture {
         let client = bus.connect().await;
         Self {
             bus,
-            _service: service,
+            service,
             client,
         }
     }
@@ -239,6 +239,25 @@ impl Fixture {
         let prompt: OwnedObjectPath = self.call(item.as_str(), ITEM, "Delete", &()).await.unwrap();
         assert_eq!(prompt.as_str(), "/");
     }
+}
+
+/// Stopping gives the name up, so another instance can take it.
+#[tokio::test]
+async fn a_stopped_service_gives_up_its_name() {
+    let fixture = Fixture::start().await;
+    fixture.set("gh:github.com", "", "t0ken").await.unwrap();
+    let address = fixture.bus.address.clone();
+    let Fixture { bus, service, .. } = fixture;
+    tokio::time::timeout(std::time::Duration::from_secs(10), service.stop())
+        .await
+        .expect("stopping waits only for calls in flight");
+    let next = serve(
+        zbus::connection::Builder::address(address.as_str()),
+        keyring(),
+    )
+    .await;
+    assert!(next.is_ok(), "the name wasn't given up: {:?}", next.err());
+    drop(bus);
 }
 
 /// A second instance on the same bus must fail, not take the name from the one serving: under

@@ -25,9 +25,9 @@ async fn main() -> ExitCode {
     }
 }
 
-/// Answers each stream the client opens until the mux ends. Its end is how this process learns
-/// the client is gone: WSL doesn't end a Windows process along with the Linux process that
-/// started it.
+/// Answers each stream the client opens until the client is gone, whether it closed the
+/// connection or died: WSL doesn't end a Windows process along with the Linux process that started
+/// it. Exits right away then, so a Credential Manager call still blocked can't keep it alive.
 #[cfg(windows)]
 async fn run() -> ExitCode {
     use std::sync::Arc;
@@ -36,22 +36,17 @@ async fn run() -> ExitCode {
 
     let store = Arc::new(store::CredentialManager);
     let stdio = tokio::io::join(tokio::io::stdin(), tokio::io::stdout());
-    let (mut acceptor, driver) = librelay::server::mux::server(stdio);
-    tokio::spawn(async move {
-        while let Some(stream) = acceptor.accept().await {
-            let store = store.clone();
-            tokio::spawn(async move {
-                if let Err(error) = serve::serve_stream(store, stream.compat()).await {
-                    tracing::warn!(%error, "a request went unanswered");
-                }
-            });
+    let outcome = librelay::server::mux::serve(stdio, move |stream| {
+        let store = store.clone();
+        async move {
+            if let Err(e) = serve::serve_stream(store, stream.compat()).await {
+                tracing::warn!(error = %e, "a request went unanswered");
+            }
         }
-    });
-    match driver.await {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(error) => {
-            tracing::info!(%error, "the client is gone");
-            ExitCode::SUCCESS
-        }
+    })
+    .await;
+    if let Err(e) = &outcome {
+        tracing::error!(error = %e, "the connection to the client failed");
     }
+    std::process::exit(if outcome.is_ok() { 0 } else { 1 })
 }

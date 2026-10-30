@@ -29,7 +29,8 @@ oo7 = { workspace = true }
 [target.'cfg(windows)'.dependencies]
 credrelay-wincred = { workspace = true }
 
-[dev-dependencies]
+# The Secret Service test is Linux-only, and so is the client it runs.
+[target.'cfg(unix)'.dev-dependencies]
 credrelay-client = { workspace = true, features = ["test-support"] }
 zbus = { workspace = true }
 
