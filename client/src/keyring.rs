@@ -2,8 +2,6 @@
 
 use std::collections::BTreeMap;
 
-use credrelay_protocol::Failure;
-
 use crate::rpc::{Rpc, RpcError};
 use crate::schemes::{Attributes, Scheme};
 
@@ -29,7 +27,7 @@ pub enum KeyringError {
 impl From<RpcError> for KeyringError {
     fn from(error: RpcError) -> Self {
         match error {
-            RpcError::Failed(Failure::NotFound) => Self::NotFound,
+            RpcError::NotFound => Self::NotFound,
             other => Self::Failed(other),
         }
     }

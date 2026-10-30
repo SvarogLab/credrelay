@@ -13,10 +13,21 @@ use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader
 
 #[derive(Debug, thiserror::Error)]
 pub enum RpcError {
-    #[error(transparent)]
-    Failed(#[from] Failure),
+    #[error("no such credential")]
+    NotFound,
+    #[error("credential store failed: {0}")]
+    Store(String),
     #[error("lost the link to credrelay-server: {0}")]
     Link(String),
+}
+
+impl From<Failure> for RpcError {
+    fn from(failure: Failure) -> Self {
+        match failure {
+            Failure::NotFound => Self::NotFound,
+            Failure::Store(message) => Self::Store(message),
+        }
+    }
 }
 
 /// A stream to the server, one per request.
@@ -165,7 +176,7 @@ mod tests {
         rpc.delete("gh:github.com:octo").await.unwrap();
         assert!(matches!(
             rpc.read("gh:github.com:octo").await,
-            Err(RpcError::Failed(Failure::NotFound))
+            Err(RpcError::NotFound)
         ));
     }
 
