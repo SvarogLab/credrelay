@@ -1,0 +1,46 @@
+[package]
+name = "credrelay-client"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+repository.workspace = true
+description.workspace = true
+
+[[bin]]
+name = "credrelay-client"
+path = "src/main.rs"
+
+[features]
+# `test_support`: a keyring in memory, for tests in other crates.
+test-support = ["credrelay-protocol/memory"]
+
+[dependencies]
+librelay = { workspace = true, features = ["client"] }
+credrelay-protocol = { workspace = true }
+credrelay-wincred = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+futures = { workspace = true }
+zbus = { workspace = true }
+num-bigint = { workspace = true }
+hkdf = { workspace = true }
+sha2 = { workspace = true }
+aes = { workspace = true }
+cbc = { workspace = true }
+getrandom = { workspace = true }
+zeroize = { workspace = true }
+serde = { workspace = true }
+percent-encoding = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+clap = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
+# An independent implementation of the client side of the DH session, to test against.
+oo7 = { version = "0.6", default-features = false, features = ["tokio", "native_crypto", "unstable"] }
+credrelay-protocol = { workspace = true, features = ["memory"] }
+
+[lints]
+workspace = true

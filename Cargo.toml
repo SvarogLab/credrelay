@@ -1,0 +1,42 @@
+[workspace]
+resolver = "3"
+members = ["protocol", "wincred", "client", "server", "keyring"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+publish = false
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/SvarogLab/credrelay"
+description = "Serves the freedesktop Secret Service on WSL from the Windows Credential Manager, so Linux gh and glab share their tokens with the Windows builds"
+
+[workspace.dependencies]
+credrelay-protocol = { path = "protocol" }
+credrelay-wincred = { path = "wincred" }
+credrelay-client = { path = "client" }
+librelay = { git = "https://github.com/SvarogLab/librelay", tag = "v0.1.0", default-features = false }
+tokio = { version = "1.54", features = ["full"] }
+tokio-util = { version = "0.7.20", features = ["compat"] }
+futures = "0.3.34"
+zbus = { version = "6.2", default-features = false, features = ["tokio", "service", "proxy"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+percent-encoding = "2.3"
+base64 = "0.23"
+oo7 = { version = "0.6", default-features = false, features = ["tokio", "native_crypto"] }
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+thiserror = "2.0.21"
+clap = { version = "4.6.7", features = ["derive"] }
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Security_Credentials"] }
+num-bigint = "0.5"
+hkdf = "0.13"
+sha2 = "0.11"
+aes = { version = "0.9", features = ["zeroize"] }
+cbc = { version = "0.2", features = ["alloc", "zeroize"] }
+getrandom = "0.4"
+zeroize = "1.9"
+
+[workspace.lints.clippy]
+# A module with submodules lives in `name.rs` beside `name/`, not in `name/mod.rs`.
+mod_module_files = "warn"

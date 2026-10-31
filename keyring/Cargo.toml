@@ -1,0 +1,38 @@
+[package]
+name = "credrelay-keyring"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+repository.workspace = true
+description.workspace = true
+
+[[bin]]
+name = "credrelay-keyring"
+path = "src/main.rs"
+
+[[bin]]
+name = "credrelay-bao-helper"
+path = "src/bao_helper.rs"
+
+[dependencies]
+tokio = { workspace = true }
+clap = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+base64 = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+oo7 = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+credrelay-wincred = { workspace = true }
+
+# The Secret Service test is Linux-only, and so is the client it runs.
+[target.'cfg(unix)'.dev-dependencies]
+credrelay-client = { workspace = true, features = ["test-support"] }
+zbus = { workspace = true }
+
+[lints]
+workspace = true

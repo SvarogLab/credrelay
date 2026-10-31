@@ -1,0 +1,29 @@
+[package]
+name = "credrelay-server"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+repository.workspace = true
+description.workspace = true
+
+[[bin]]
+name = "credrelay-server"
+path = "src/main.rs"
+
+[dependencies]
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+librelay = { workspace = true, features = ["server"] }
+credrelay-protocol = { workspace = true }
+clap = { workspace = true }
+tracing = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+credrelay-wincred = { workspace = true }
+
+[dev-dependencies]
+credrelay-protocol = { workspace = true, features = ["memory"] }
+
+[lints]
+workspace = true
