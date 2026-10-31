@@ -261,9 +261,10 @@ journalctl --user -u credrelay
   `systemctl --user edit credrelay.service` and `Environment=RUST_LOG=debug` under `[Service]`. An
   invalid one stops the client before it starts anything.
 - The client passes the same filter to the server as `--log-filter`.
-- Each line the server writes is forwarded with a `server:` prefix followed by a space. The server
-  leaves out its own timestamp when its stderr isn't a terminal, since the journal adds one.
-- Output is colored only on a terminal.
+- Each line the server writes is forwarded with a `server:` prefix followed by a space.
+- On a terminal, both processes color and timestamp their lines. Otherwise — the client's stderr
+  under systemd, the server's whenever the client spawns it — the journal timestamps every line, so
+  neither adds a timestamp or color of its own.
 
 ## Building
 
