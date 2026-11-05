@@ -17,6 +17,7 @@ fn exit_after_sending(input: &[u8]) -> ExitStatus {
     server.wait().unwrap()
 }
 
+/// The client reports a server that exits otherwise as having failed.
 #[cfg(windows)]
 #[test]
 fn a_client_that_closes_the_connection_leaves_the_server_exiting_successfully() {

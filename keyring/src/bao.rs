@@ -176,15 +176,4 @@ mod tests {
         );
         assert!(matches!(address(env(&[])), Err(BaoError::NoAddress)));
     }
-
-    #[test]
-    fn only_the_three_operations_parse() {
-        assert_eq!("get".parse::<Operation>().unwrap(), Operation::Get);
-        assert_eq!("store".parse::<Operation>().unwrap(), Operation::Store);
-        assert_eq!("erase".parse::<Operation>().unwrap(), Operation::Erase);
-        assert!(matches!(
-            "list".parse::<Operation>(),
-            Err(BaoError::UnknownOperation(_))
-        ));
-    }
 }

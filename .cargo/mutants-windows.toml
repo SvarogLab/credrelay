@@ -1,0 +1,17 @@
+# The Windows run, of the code that builds only there; see the README for how it is run.
+
+# Under the build directory, which is ignored already.
+output = "target"
+
+examine_globs = [
+    "wincred/src/store.rs",
+    "server/src/main.rs",
+    "server/src/serve.rs",
+    "server/src/store.rs",
+    "keyring/src/backend/credential_manager.rs",
+]
+
+exclude_re = [
+    # Frees what the Credential Manager allocated: a leak changes nothing a test can observe.
+    "replace <impl Drop for Owned<T>>::drop with \\(\\)",
+]

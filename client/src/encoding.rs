@@ -225,14 +225,6 @@ mod tests {
         assert_eq!(*shared, expected);
     }
 
-    #[test]
-    fn an_unknown_algorithm_is_unsupported() {
-        assert!(matches!(
-            Encoding::negotiate("dh-ietf2048-sha512", &[]),
-            Err(EncodingError::Unsupported(_))
-        ));
-    }
-
     /// Only a secret that can't be AES-CBC at all is rejected every time: the algorithm carries no
     /// MAC, so a whole block of garbage decrypts to valid padding about once in 256 tries.
     #[test]

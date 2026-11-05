@@ -96,6 +96,7 @@ mod tests {
         assert_eq!(decode_line::<Request>(&line).unwrap(), request);
     }
 
+    /// The README describes the protocol with lines in exactly this form.
     #[test]
     fn a_request_is_writable_by_hand() {
         let request: Request = decode_line(r#"{"op":"read","target":"gh:github.com:"}"#).unwrap();

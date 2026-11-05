@@ -336,13 +336,13 @@ cargo mutants --workspace
 ```
 
 That run leaves out the Windows-only code, which doesn't build on Linux. Its mutants run on Windows
-the way its tests do, from the same shell as above:
+the way its tests do, from the same shell as above, with `.cargo/mutants-windows.toml` naming that
+code instead:
 
 ```sh
-cargo mutants -p credrelay-wincred -p credrelay-server -p credrelay-keyring \
-  --cargo-arg=--target=aarch64-pc-windows-msvc \
-  -f wincred/src/store.rs -f server/src/main.rs -f server/src/serve.rs -f server/src/store.rs \
-  -f keyring/src/backend/credential_manager.rs
+cargo mutants --config .cargo/mutants-windows.toml \
+  -p credrelay-wincred -p credrelay-server -p credrelay-keyring \
+  --cargo-arg=--target=aarch64-pc-windows-msvc
 ```
 
 ### Fuzzing

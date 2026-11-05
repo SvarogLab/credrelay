@@ -787,3 +787,22 @@ async fn the_service_finds_items_unlocked() {
     assert_eq!(unlocked, [item]);
     assert!(locked.is_empty(), "{locked:?}");
 }
+
+/// libsecret and oo7 open a plain session when the service refuses DH as not supported, so an
+/// algorithm the service doesn't know must be refused with exactly that error.
+#[tokio::test]
+async fn an_unknown_algorithm_is_refused_as_not_supported() {
+    let fixture = Fixture::start().await;
+    let opened = fixture
+        .call::<_, (OwnedVariant, OwnedObjectPath)>(
+            SERVICE_PATH,
+            SERVICE,
+            "OpenSession",
+            &("dh-ietf2048-sha512", Variant::from(vec![2u8])),
+        )
+        .await;
+    assert_eq!(
+        error_name(opened),
+        "org.freedesktop.DBus.Error.NotSupported"
+    );
+}
