@@ -2,8 +2,11 @@
 
 use std::io::Write;
 use std::process::{Command, ExitStatus, Stdio};
+use std::time::{Duration, Instant};
 
 const SERVER: &str = env!("CARGO_BIN_EXE_credrelay-server");
+/// A server that never exits fails the test instead of hanging it.
+const WITHIN: Duration = Duration::from_secs(10);
 
 fn exit_after_sending(input: &[u8]) -> ExitStatus {
     let mut server = Command::new(SERVER)
@@ -14,7 +17,17 @@ fn exit_after_sending(input: &[u8]) -> ExitStatus {
         .spawn()
         .unwrap();
     server.stdin.take().unwrap().write_all(input).unwrap();
-    server.wait().unwrap()
+    let deadline = Instant::now() + WITHIN;
+    loop {
+        if let Some(status) = server.try_wait().unwrap() {
+            return status;
+        }
+        if Instant::now() >= deadline {
+            let _ = server.kill();
+            panic!("the server didn't exit within {WITHIN:?}");
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
 }
 
 /// The client reports a server that exits otherwise as having failed.
