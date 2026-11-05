@@ -8,6 +8,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use credrelay_protocol::{MemoryStore, answer};
+use futures::{FutureExt, StreamExt};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
@@ -78,14 +79,26 @@ async fn serves_until_told_to_stop_then_gives_up_the_name() {
 }
 
 /// A client whose server can't answer would fail every application that called it, so it exits
-/// without ever taking the name.
+/// without ever taking the name, not even for a moment.
 async fn a_server_that_cant_answer_keeps_it_off_the_bus() {
     let bus = Bus::start().await;
+    let watcher = bus.connect().await;
+    let mut owners = zbus::fdo::DBusProxy::new(&watcher)
+        .await
+        .unwrap()
+        .receive_name_owner_changed_with_args(&[(0, BUS_NAME)])
+        .await
+        .unwrap();
     let mut client = bus.client("exit");
     let status = exit_within(&mut client).await;
     assert!(!status.success(), "{status:?}");
-    let watcher = bus.connect().await;
+    // The bus sends a signal before the reply to any later call, so once this reply is in, every
+    // change of owner the client caused has arrived.
     assert!(!has_owner(&watcher).await);
+    assert!(
+        owners.next().now_or_never().is_none(),
+        "{BUS_NAME} changed owner"
+    );
 }
 
 struct Bus {
@@ -113,9 +126,11 @@ impl Bus {
     }
 
     fn client(&self, stand_in: &str) -> Child {
+        // Nothing of the test's own environment, such as a log filter or a systemd notify socket.
         Command::new(CLIENT)
             .arg("--server-exe")
             .arg(std::env::current_exe().unwrap())
+            .env_clear()
             .env("DBUS_SESSION_BUS_ADDRESS", &self.address)
             .env(STAND_IN, stand_in)
             .stdin(Stdio::null())

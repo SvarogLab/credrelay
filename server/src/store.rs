@@ -44,12 +44,22 @@ mod tests {
 
     use super::*;
 
+    /// Deletes the credential when dropped, so a failed assertion leaves nothing behind.
+    struct Written(String);
+
+    impl Drop for Written {
+        fn drop(&mut self) {
+            let _ = WinCred.delete(&self.0);
+        }
+    }
+
     /// Through the same handler the server answers streams with, against the real Credential
     /// Manager, under a name no one else uses.
     #[test]
     fn every_request_reaches_the_credential_manager() {
         let prefix = format!("credrelay-test:{}:server:", std::process::id());
         let target = format!("{prefix}octo");
+        let _written = Written(target.clone());
         let request = |request| handle(&CredentialManager, request);
 
         assert_eq!(

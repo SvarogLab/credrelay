@@ -310,9 +310,9 @@ in-memory store and drive it the way `go-keyring` and oo7 do. `client/tests/life
 built client the way its unit does, with the test binary standing in as its server, and
 `keyring/tests/secret_service.rs` runs the built `credrelay-keyring` and `credrelay-bao-helper`.
 
-The Credential Manager code builds only for Windows. Its tests, in `credrelay-wincred` and
-`credrelay-keyring`, run there against the real Credential Manager of whoever runs them, under
-names starting with `credrelay-test`, and delete what they write:
+The Credential Manager code builds only for Windows. Its tests, in `credrelay-wincred`,
+`credrelay-server` and `credrelay-keyring`, run there against the real Credential Manager of
+whoever runs them, under names starting with `credrelay-test`, and delete what they write:
 
 ```sh
 eval "$(cargo xwin env --target aarch64-pc-windows-msvc)"
@@ -324,43 +324,6 @@ cargo clippy -p credrelay-wincred -p credrelay-server -p credrelay-keyring --all
 
 (`cargo xwin env` sets the target's runner to `wine`, which isn't needed here, so it is unset.) The
 client is unix-only, so only these three build for Windows.
-
-### Mutation testing
-
-Every mutant [cargo-mutants](https://mutants.rs/) makes must be caught. A mutant that can't be,
-because it behaves exactly like the code, is listed with the reason in `.cargo/mutants.toml`, which
-also sends the report into `target/mutants.out`:
-
-```sh
-cargo mutants --workspace
-```
-
-That run leaves out the Windows-only code, which doesn't build on Linux. Its mutants run on Windows
-the way its tests do, from the same shell as above, with `.cargo/mutants-windows.toml` naming that
-code instead:
-
-```sh
-cargo mutants --config .cargo/mutants-windows.toml \
-  -p credrelay-wincred -p credrelay-server -p credrelay-keyring \
-  --cargo-arg=--target=aarch64-pc-windows-msvc
-```
-
-### Fuzzing
-
-`fuzz/` holds [cargo-fuzz](https://rust-fuzz.github.io/book/cargo-fuzz.html) targets for what any
-local D-Bus client can send: `native_target` checks that distinct attributes name distinct
-credentials even compared regardless of case, and that they read back; `dh_session` that no public
-key, IV or ciphertext panics the service and that every secret it encodes decodes back. They need a
-nightly toolchain. `fuzz/run.sh` builds one and runs it for the seconds given (60 by default),
-keeping its build, corpus and any crash under `target/fuzz` (or `$CARGO_TARGET_DIR/fuzz`):
-
-```sh
-fuzz/run.sh native_target 300
-fuzz/run.sh dh_session 300
-```
-
-A crash is saved as `target/fuzz/artifacts/<target>/crash-…`; the fix comes with a unit test that
-reproduces it.
 
 ## Security notes
 

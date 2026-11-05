@@ -33,7 +33,8 @@ impl Service {
         }
     }
 
-    /// Runs `program` with `args` and `env`, writing `stdin` to it.
+    /// Nothing of the test's own environment reaches the program but the bus address: a log
+    /// filter or a bus variable of whoever runs the tests would change what it does.
     async fn run(
         &self,
         program: &str,

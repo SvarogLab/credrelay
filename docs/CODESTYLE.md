@@ -8,8 +8,9 @@
 ## Lints
 
 `cargo clippy --workspace --all-targets --all-features -- -D warnings` passes on Linux, and
-`cargo clippy -p credrelay-wincred -p credrelay-server -p credrelay-keyring --all-targets -- -D warnings`
-passes for the Windows target.
+`cargo clippy -p credrelay-wincred -p credrelay-server -p credrelay-keyring --all-targets
+--target aarch64-pc-windows-msvc -- -D warnings` passes for the Windows target (see the README for
+the environment it runs in).
 Workspace-wide lints live in `[workspace.lints]` in `Cargo.toml`; a threshold goes into
 `clippy.toml` only with a comment naming the code it is for.
 
@@ -40,17 +41,6 @@ are sentences stating the behaviour they hold.
 
 Code says what it does; a comment says why, when the reason lives outside the code: a quirk of
 Windows, of WSL or of a client library, with the behaviour it forces.
-
-## Tests
-
-- A test pins behaviour a user, a client library or the system relies on, and must be able to
-  fail: one that no mutant needs and no such contract names is merged into another or removed.
-- `cargo mutants` stays at zero missed. A missed mutant gets the test it reveals is lacking; one
-  that behaves exactly like the code is excluded in `.cargo/mutants.toml` with the reason.
-- A fuzz target asserts a property (a round trip, an invariant), not only that nothing panics. What
-  it finds becomes a unit test beside the code it broke.
-- Nothing the test tools generate (the mutants report, the fuzz build, corpus and crashes) lives in
-  the repository, nor in `.gitignore`: it goes under the build directory.
 
 ## Dependencies
 
