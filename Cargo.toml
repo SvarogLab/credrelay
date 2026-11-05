@@ -23,7 +23,7 @@ serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 percent-encoding = "2.3"
 base64 = "0.23"
-oo7 = { version = "0.6", default-features = false, features = ["tokio", "native_crypto"] }
+oo7 = { version = "0.7", default-features = false, features = ["tokio", "native_crypto"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 thiserror = "2.0.21"
