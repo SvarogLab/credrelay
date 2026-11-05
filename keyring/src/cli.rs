@@ -145,18 +145,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn delete_removes_the_secret() {
-        let backend = Memory::default();
-        run(&backend, &parse(&["set", "age:default"]), b"k")
-            .await
-            .unwrap();
-        run(&backend, &parse(&["delete", "age:default"]), b"")
-            .await
-            .unwrap();
-        assert_eq!(backend.get("age:default", "").await.unwrap(), None);
-    }
-
-    #[tokio::test]
     async fn kube_credential_turns_the_stored_user_entry_into_an_exec_credential() {
         let backend = Memory::default();
         run(

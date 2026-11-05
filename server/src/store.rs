@@ -37,3 +37,64 @@ impl CredentialStore for CredentialManager {
             .collect())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use credrelay_protocol::{Reply, Request, handle};
+
+    use super::*;
+
+    /// Deletes the credential when dropped, so a failed assertion leaves nothing behind.
+    struct Written(String);
+
+    impl Drop for Written {
+        fn drop(&mut self) {
+            let _ = WinCred.delete(&self.0);
+        }
+    }
+
+    /// Through the same handler the server answers streams with, against the real Credential
+    /// Manager, under a name no one else uses.
+    #[test]
+    fn every_request_reaches_the_credential_manager() {
+        let prefix = format!("credrelay-test:{}:server:", std::process::id());
+        let target = format!("{prefix}octo");
+        let _written = Written(target.clone());
+        let request = |request| handle(&CredentialManager, request);
+
+        assert_eq!(
+            request(Request::Write {
+                target: target.clone(),
+                username: "octo".into(),
+                secret: b"t0ken".to_vec(),
+            }),
+            Ok(Reply::Done)
+        );
+        assert_eq!(
+            request(Request::Read {
+                target: target.clone()
+            }),
+            Ok(Reply::Secret(b"t0ken".to_vec()))
+        );
+        assert_eq!(
+            request(Request::List { prefix }),
+            Ok(Reply::Credentials(vec![Credential {
+                target: target.clone(),
+                username: "octo".into(),
+            }]))
+        );
+        assert_eq!(
+            request(Request::Delete {
+                target: target.clone()
+            }),
+            Ok(Reply::Done)
+        );
+        assert_eq!(
+            request(Request::Read {
+                target: target.clone()
+            }),
+            Err(Failure::NotFound)
+        );
+        assert_eq!(request(Request::Delete { target }), Err(Failure::NotFound));
+    }
+}

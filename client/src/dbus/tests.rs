@@ -559,17 +559,26 @@ async fn a_disconnected_clients_sessions_are_dropped() {
         let read = fixture
             .call::<_, (WireSecret,)>(item.as_str(), ITEM, "GetSecret", &(&session,))
             .await;
-        match read {
-            Err(zbus::Error::MethodError(name, _, _))
-                if name.as_str() == "org.freedesktop.Secret.Error.NoSession" =>
-            {
-                break;
-            }
-            other => assert!(
-                tokio::time::Instant::now() < deadline,
-                "the session outlived its client: {other:?}"
-            ),
+        // Introspection only looks: closing the session would drop it whether or not the watcher
+        // did.
+        let object = fixture
+            .call::<_, String>(
+                session.as_str(),
+                "org.freedesktop.DBus.Introspectable",
+                "Introspect",
+                &(),
+            )
+            .await;
+        if read.is_err()
+            && error_name(read) == "org.freedesktop.Secret.Error.NoSession"
+            && !object.is_ok_and(|xml| xml.contains(SESSION))
+        {
+            break;
         }
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "the session outlived its client"
+        );
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
     }
 }
@@ -656,5 +665,144 @@ async fn a_secret_for_a_closed_session_is_refused() {
     assert!(
         matches!(&error, zbus::Error::MethodError(name, _, _) if name.as_str() == "org.freedesktop.Secret.Error.NoSession"),
         "{error:?}"
+    );
+}
+
+/// The name of the D-Bus error a call failed with, which zbus reports in one of two shapes.
+fn error_name<T: std::fmt::Debug>(result: zbus::Result<T>) -> String {
+    match result {
+        Err(zbus::Error::MethodError(name, _, _)) => name.to_string(),
+        Err(zbus::Error::FDO(error)) => zbus::DBusError::name(&*error).to_string(),
+        other => panic!("expected a D-Bus error, got {other:?}"),
+    }
+}
+
+/// Two sessions open at once are two sessions: closing one leaves the other usable.
+#[tokio::test]
+async fn each_session_lives_at_its_own_path() {
+    let fixture = Fixture::start().await;
+    let item = fixture.set("gh:github.com", "", "t0ken").await.unwrap();
+    let first = fixture.open_plain_session().await;
+    let second = fixture.open_plain_session().await;
+    assert_ne!(first, second);
+    let _: () = fixture
+        .call(first.as_str(), SESSION, "Close", &())
+        .await
+        .unwrap();
+    let ((_, _, value, _),): (WireSecret,) = fixture
+        .call(item.as_str(), ITEM, "GetSecret", &(&second,))
+        .await
+        .unwrap();
+    assert_eq!(value, b"t0ken");
+}
+
+/// The login collection is the only one, under fixed aliases, and can't be deleted.
+#[tokio::test]
+async fn the_collection_and_its_aliases_are_fixed() {
+    let fixture = Fixture::start().await;
+    let properties: HashMap<&str, Variant<'_>> = HashMap::new();
+    let created = fixture
+        .call::<_, (OwnedObjectPath, OwnedObjectPath)>(
+            SERVICE_PATH,
+            SERVICE,
+            "CreateCollection",
+            &(properties, "work"),
+        )
+        .await;
+    assert_eq!(
+        error_name(created),
+        "org.freedesktop.DBus.Error.NotSupported"
+    );
+    let login = OwnedObjectPath::try_from(LOGIN_PATH).unwrap();
+    let aliased = fixture
+        .call::<_, ()>(SERVICE_PATH, SERVICE, "SetAlias", &("work", &login))
+        .await;
+    assert_eq!(
+        error_name(aliased),
+        "org.freedesktop.DBus.Error.NotSupported"
+    );
+    let deleted = fixture
+        .call::<_, OwnedObjectPath>(LOGIN_PATH, COLLECTION, "Delete", &())
+        .await;
+    assert_eq!(
+        error_name(deleted),
+        "org.freedesktop.DBus.Error.NotSupported"
+    );
+    let unknown: OwnedObjectPath = fixture
+        .call(SERVICE_PATH, SERVICE, "ReadAlias", &("work",))
+        .await
+        .unwrap();
+    assert_eq!(unknown.as_str(), "/");
+}
+
+/// Nothing keeps labels or times: the collection reports fixed ones, an item its target and no
+/// time.
+#[tokio::test]
+async fn the_collection_and_its_items_describe_themselves() {
+    let fixture = Fixture::start().await;
+    let item = fixture.set("gh:github.com", "octo", "t0ken").await.unwrap();
+    let label: String = fixture.property(LOGIN_PATH, COLLECTION, "Label").await;
+    assert_eq!(label, "Login");
+    let locked: bool = fixture.property(LOGIN_PATH, COLLECTION, "Locked").await;
+    assert!(!locked);
+    let label: String = fixture.property(item.as_str(), ITEM, "Label").await;
+    assert_eq!(label, "gh:github.com:octo");
+    for (path, interface) in [(LOGIN_PATH, COLLECTION), (item.as_str(), ITEM)] {
+        for time in ["Created", "Modified"] {
+            let value: u64 = fixture.property(path, interface, time).await;
+            assert_eq!(value, 0, "{interface}.{time}");
+        }
+    }
+}
+
+/// Locking locks nothing: the reply names no object locked, and the item stays readable.
+#[tokio::test]
+async fn nothing_is_ever_locked() {
+    let fixture = Fixture::start().await;
+    let item = fixture.set("gh:github.com", "", "t0ken").await.unwrap();
+    let (locked, prompt): (Vec<OwnedObjectPath>, OwnedObjectPath) = fixture
+        .call(SERVICE_PATH, SERVICE, "Lock", &(vec![&item],))
+        .await
+        .unwrap();
+    assert!(locked.is_empty(), "{locked:?}");
+    assert_eq!(prompt.as_str(), "/");
+    let still_locked: bool = fixture.property(item.as_str(), ITEM, "Locked").await;
+    assert!(!still_locked);
+}
+
+/// libsecret searches through the service rather than a collection, and every item is unlocked.
+#[tokio::test]
+async fn the_service_finds_items_unlocked() {
+    let fixture = Fixture::start().await;
+    let item = fixture.set("gh:github.com", "octo", "t0ken").await.unwrap();
+    fixture
+        .set("gh:github.com", "other", "t1ken")
+        .await
+        .unwrap();
+    let attributes = HashMap::from([("service", "gh:github.com"), ("username", "octo")]);
+    let (unlocked, locked): (Vec<OwnedObjectPath>, Vec<OwnedObjectPath>) = fixture
+        .call(SERVICE_PATH, SERVICE, "SearchItems", &(attributes,))
+        .await
+        .unwrap();
+    assert_eq!(unlocked, [item]);
+    assert!(locked.is_empty(), "{locked:?}");
+}
+
+/// libsecret and oo7 open a plain session when the service refuses DH as not supported, so an
+/// algorithm the service doesn't know must be refused with exactly that error.
+#[tokio::test]
+async fn an_unknown_algorithm_is_refused_as_not_supported() {
+    let fixture = Fixture::start().await;
+    let opened = fixture
+        .call::<_, (OwnedVariant, OwnedObjectPath)>(
+            SERVICE_PATH,
+            SERVICE,
+            "OpenSession",
+            &("dh-ietf2048-sha512", Variant::from(vec![2u8])),
+        )
+        .await;
+    assert_eq!(
+        error_name(opened),
+        "org.freedesktop.DBus.Error.NotSupported"
     );
 }

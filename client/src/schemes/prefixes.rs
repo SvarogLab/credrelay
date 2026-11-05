@@ -58,6 +58,7 @@ mod tests {
         assert!(!prefixes.covers(""));
     }
 
+    /// An empty prefix would let a scheme read, overwrite and delete every credential.
     #[test]
     fn refuses_to_cover_nothing_or_everything() {
         assert_eq!(Prefixes::new(vec![]).unwrap_err(), PrefixesError::Empty);

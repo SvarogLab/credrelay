@@ -306,11 +306,13 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 
 The client's tests, and `credrelay-keyring`'s Linux test, start a private `dbus-daemon` and read
 some replies back with `busctl`, so both need to be installed. They run the service against an
-in-memory store and drive it the way `go-keyring` and oo7 do.
+in-memory store and drive it the way `go-keyring` and oo7 do. `client/tests/lifecycle.rs` runs the
+built client the way its unit does, with the test binary standing in as its server, and
+`keyring/tests/secret_service.rs` runs the built `credrelay-keyring` and `credrelay-bao-helper`.
 
-The Credential Manager code builds only for Windows. Its tests, in `credrelay-wincred` and
-`credrelay-keyring`, run there against the real Credential Manager of whoever runs them, under
-names starting with `credrelay-test`, and delete what they write:
+The Credential Manager code builds only for Windows. Its tests, in `credrelay-wincred`,
+`credrelay-server` and `credrelay-keyring`, run there against the real Credential Manager of
+whoever runs them, under names starting with `credrelay-test`, and delete what they write:
 
 ```sh
 eval "$(cargo xwin env --target aarch64-pc-windows-msvc)"

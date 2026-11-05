@@ -134,6 +134,7 @@ fn prefixes_to_list(scheme: &dyn Scheme, attributes: &Attributes) -> Vec<String>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::schemes::{self, Prefixes};
     use crate::test_support::{attributes, keyring};
 
     fn gh(username: &str) -> Attributes {
@@ -226,6 +227,27 @@ mod tests {
         let by_url = attributes(&[("url", "https://index.crates.io/")]);
         keyring.store(&by_url, b"other").await.unwrap();
         assert_eq!(keyring.search(&Attributes::new()).await.unwrap().len(), 2);
+    }
+
+    /// A search lists only what lies inside the scheme's own prefixes, so it never reads the names
+    /// of credentials no scheme owns.
+    #[test]
+    fn a_search_lists_only_inside_the_schemes_prefixes() {
+        let go_keyring = schemes::GoKeyring::new(
+            Prefixes::new(vec!["gh:github.com/".into(), "glab:".into()]).unwrap(),
+        );
+        let listed = |pairs: &[(&str, &str)]| prefixes_to_list(&go_keyring, &attributes(pairs));
+        assert_eq!(
+            listed(&[("service", "glab:gitlab.com")]),
+            ["glab:gitlab.com:"]
+        );
+        assert_eq!(listed(&[("service", "gh")]), ["gh:github.com/"]);
+        assert!(listed(&[("service", "git")]).is_empty());
+        assert_eq!(listed(&[]), ["gh:github.com/", "glab:"]);
+        assert_eq!(
+            prefixes_to_list(&schemes::Native::default(), &gh("octo")),
+            [schemes::NATIVE_PREFIX]
+        );
     }
 
     #[tokio::test]

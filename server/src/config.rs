@@ -15,6 +15,7 @@ pub struct Config {
 mod tests {
     use super::*;
 
+    /// The README promises that every flag is required: the client passes them all.
     #[test]
     fn the_log_filter_is_required() {
         assert!(Config::try_parse_from(["credrelay-server"]).is_err());
