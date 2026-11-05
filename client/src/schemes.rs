@@ -27,7 +27,9 @@ pub trait Scheme: Send + Sync {
 
     /// A target prefix every credential matching a search for `attributes` starts with, to list
     /// instead of all of [`Scheme::prefixes`].
-    fn search_prefix(&self, attributes: &Attributes) -> Option<String>;
+    fn search_prefix(&self, _attributes: &Attributes) -> Option<String> {
+        None
+    }
 
     /// The attributes of a listed credential, if this scheme could have stored it.
     fn attributes(&self, credential: &Credential) -> Option<Attributes>;

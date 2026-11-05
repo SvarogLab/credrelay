@@ -173,6 +173,21 @@ mod tests {
         assert_eq!(encoding.decode(&iv, &sent).unwrap(), b"other");
     }
 
+    /// A fixed private key would hand every client the same session key.
+    #[test]
+    fn every_session_gets_its_own_service_key() {
+        let client_private = Key::generate_private_key().unwrap();
+        let client_public = Key::generate_public_key(&client_private).unwrap();
+        let negotiate = || {
+            Encoding::negotiate(DH_AES, client_public.as_ref())
+                .unwrap()
+                .1
+        };
+        let first = negotiate();
+        assert_ne!(first, negotiate());
+        assert_ne!(first, [1]);
+    }
+
     #[test]
     fn a_client_public_key_must_lie_strictly_between_1_and_the_prime_minus_1() {
         let prime = &*OAKLEY_GROUP_2;

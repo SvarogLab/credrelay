@@ -65,10 +65,6 @@ impl Scheme for Native {
         })
     }
 
-    fn search_prefix(&self, _attributes: &Attributes) -> Option<String> {
-        None
-    }
-
     fn attributes(&self, credential: &Credential) -> Option<Attributes> {
         let encoded = credential.target.strip_prefix(PREFIX)?;
         if encoded.is_empty() {

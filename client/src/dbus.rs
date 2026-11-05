@@ -101,7 +101,7 @@ async fn close_sessions_of_departed(
 ) {
     while let Some(change) = departures.next().await {
         let Ok(args) = change.args() else { continue };
-        if args.new_owner().is_some() || !args.name().starts_with(':') {
+        if args.new_owner().is_some() {
             continue;
         }
         for path in state.take_sessions_of(args.name()) {

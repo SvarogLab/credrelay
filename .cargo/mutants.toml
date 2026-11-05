@@ -1,1 +1,10 @@
+# Under the build directory, which is ignored already.
 output = "target"
+
+exclude_re = [
+    # The default object path is `/`, the very path it returns.
+    "replace no_prompt -> OwnedObjectPath with Default::default\\(\\)",
+    # Every prefix of the scheme's own starts with the empty one, so listing it lists them all,
+    # as no search prefix does.
+    "replace Scheme::search_prefix -> Option<String> with Some\\(String::new\\(\\)\\)",
+]
