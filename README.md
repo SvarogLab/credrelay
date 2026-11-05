@@ -21,8 +21,9 @@ their own, apart from the Windows one.
 - **`credrelay-client`** (WSL/Linux) owns `org.freedesktop.secrets` on the session bus. At startup it
   starts **`credrelay-server.exe`** exactly once and multiplexes every credential request over that
   process's stdin/stdout with [`yamux`](https://docs.rs/yamux), one stream per request, so requests
-  run side by side and a slow one holds up no other. Starting one Windows process per request would
-  run into a WSL interop bug under load ([microsoft/WSL #7371](https://github.com/microsoft/WSL/issues/7371)).
+  run side by side and a slow one holds up no other. With a Windows process per request, every
+  request would also wait for that process to start through WSL interop: around 80 ms on a test
+  machine.
   Before taking the bus name the client asks the server one question, so a server that can't answer
   never serves. If the server exits or the connection to it ends, the client exits too rather than
   restarting it; systemd restarts the client. The spawning, the multiplexing, the logging and this
