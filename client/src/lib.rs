@@ -13,3 +13,10 @@ pub mod test_support;
 
 pub use keyring::Keyring;
 pub use run::{RunError, run};
+
+/// What the fuzz targets in `fuzz/` drive, which nothing else outside the crate needs.
+#[cfg(fuzzing)]
+pub mod fuzzing {
+    pub use crate::encoding::{DH_AES, Encoding, EncodingError};
+    pub use crate::schemes::{Attributes, NATIVE_PREFIX, Native, Scheme};
+}

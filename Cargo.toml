@@ -37,6 +37,10 @@ cbc = { version = "0.2", features = ["alloc", "zeroize"] }
 getrandom = "0.4"
 zeroize = "1.9"
 
+[workspace.lints.rust]
+# cargo fuzz builds with `--cfg fuzzing`.
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(fuzzing)"] }
+
 [workspace.lints.clippy]
 # A module with submodules lives in `name.rs` beside `name/`, not in `name/mod.rs`.
 mod_module_files = "warn"
