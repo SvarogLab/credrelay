@@ -7,10 +7,14 @@
 
 ## Lints
 
-`cargo clippy --workspace --all-targets --all-features -- -D warnings` passes on Linux, and
-`cargo clippy -p credrelay-wincred -p credrelay-server -p credrelay-keyring --all-targets
---target aarch64-pc-windows-msvc -- -D warnings` passes for the Windows target (see the README for
-the environment it runs in).
+`cargo clippy --workspace --all-targets --all-features -- -D warnings` passes on Linux, and this
+passes for the Windows target, in the environment the README sets up for it:
+
+```sh
+cargo clippy -p credrelay-wincred -p credrelay-server -p credrelay-keyring --all-targets \
+  --target aarch64-pc-windows-msvc -- -D warnings
+```
+
 Workspace-wide lints live in `[workspace.lints]` in `Cargo.toml`; a threshold goes into
 `clippy.toml` only with a comment naming the code it is for.
 
