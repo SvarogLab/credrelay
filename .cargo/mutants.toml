@@ -7,4 +7,6 @@ exclude_re = [
     # Every prefix of the scheme's own starts with the empty one, so listing it lists them all,
     # as no search prefix does.
     "replace Scheme::search_prefix -> Option<String> with Some\\(String::new\\(\\)\\)",
+    # Frees what the Credential Manager allocated: a leak changes nothing a test can observe.
+    "replace <impl Drop for Owned<T>>::drop with \\(\\)",
 ]
