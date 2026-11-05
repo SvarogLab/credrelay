@@ -41,6 +41,12 @@ tokio = { workspace = true, features = ["test-util"] }
 # An independent implementation of the client side of the DH session, to test against.
 oo7 = { workspace = true, features = ["unstable"] }
 credrelay-protocol = { workspace = true, features = ["memory"] }
+# The stand-in server in tests/lifecycle.rs.
+librelay = { workspace = true, features = ["server"] }
+
+[[test]]
+name = "lifecycle"
+harness = false
 
 [lints]
 workspace = true
