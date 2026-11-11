@@ -50,7 +50,7 @@ sudo install -m 755 "$REPO_DIR/target/release/credrelay-client" "$BIN_DIR/credre
 sudo install -m 755 "$REPO_DIR/target/$WIN_TARGET/release/credrelay-server.exe" "$BIN_DIR/credrelay-server.exe"
 
 echo "==> Installing credrelay-keyring and credrelay-bao-helper (cargo install)"
-cargo install --path "$REPO_DIR/keyring"
+cargo install --locked --path "$REPO_DIR/keyring"
 
 # Windows applications run the Windows helpers, so the Windows toolchain installs them into its own
 # cargo bin directory. It reads the sources through \\wsl.localhost but builds under %TEMP%, since
@@ -67,7 +67,7 @@ echo "==> Installing the Windows credrelay-keyring and credrelay-bao-helper (Win
     fi
     WIN_TEMP="$(cmd.exe /c 'echo %TEMP%' 2>/dev/null | tr -d '\r')"
     CARGO_TARGET_DIR="$WIN_TEMP\\credrelay-target" WSLENV="${WSLENV:+$WSLENV:}CARGO_TARGET_DIR" \
-        "$(wslpath "$WIN_CARGO")" install --path "$(wslpath -w "$REPO_DIR/keyring")"
+        "$(wslpath "$WIN_CARGO")" install --locked --path "$(wslpath -w "$REPO_DIR/keyring")"
 )
 
 echo "==> Installing the systemd user unit and the D-Bus activation file"
