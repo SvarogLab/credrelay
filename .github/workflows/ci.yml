@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   rust:
-    uses: SvarogLab/.github/.github/workflows/rust.yml@v1
+    uses: SvarogLab/.github/.github/workflows/rust.yml@v2
     with:
       binaries: credrelay-client credrelay-keyring credrelay-bao-helper
       build-args: -p credrelay-client -p credrelay-keyring
@@ -28,14 +28,14 @@ jobs:
   tag:
     needs: rust
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    uses: SvarogLab/.github/.github/workflows/tag-release.yml@v1
+    uses: SvarogLab/.github/.github/workflows/tag-release.yml@v2
     permissions:
       contents: write
 
   release:
     needs: tag
     if: needs.tag.outputs.tag != ''
-    uses: SvarogLab/.github/.github/workflows/release.yml@v1
+    uses: SvarogLab/.github/.github/workflows/release.yml@v2
     permissions:
       contents: write
     with:
