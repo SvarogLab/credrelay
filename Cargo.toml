@@ -21,9 +21,9 @@ futures = "0.3.34"
 zbus = { version = "6.2.1", default-features = false, features = ["tokio", "service", "proxy"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
-percent-encoding = "2.3"
+percent-encoding = "2.3.2"
 base64 = "0.23.1"
-oo7 = { version = "0.7", default-features = false, features = ["tokio", "native_crypto"] }
+oo7 = { version = "0.7.1", default-features = false, features = ["tokio", "native_crypto"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 thiserror = "2.0.21"
@@ -31,11 +31,11 @@ clap = { version = "4.6.7", features = ["derive"] }
 windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Security_Credentials"] }
 num-bigint = "0.5"
 hkdf = "0.13"
-sha2 = "0.11"
+sha2 = "0.11.1"
 aes = { version = "0.9.4", features = ["zeroize"] }
-cbc = { version = "0.2", features = ["alloc", "zeroize"] }
+cbc = { version = "0.2.1", features = ["alloc", "zeroize"] }
 getrandom = "0.4.3"
-zeroize = "1.9"
+zeroize = "1.9.1"
 
 [workspace.lints.clippy]
 # A module with submodules lives in `name.rs` beside `name/`, not in `name/mod.rs`.
