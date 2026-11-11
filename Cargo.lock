@@ -575,8 +575,8 @@ checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 
 [[package]]
 name = "librelay"
-version = "0.1.1"
-source = "git+https://github.com/SvarogLab/librelay?tag=v0.1.1#2a4391fe56d39e2b6d5bfd1e36570a15e54b8096"
+version = "0.1.2"
+source = "git+https://github.com/SvarogLab/librelay?tag=v0.1.2#6dda03bac9e21e208de3d049220e7e70ab8fda9e"
 dependencies = [
  "clap",
  "futures",
