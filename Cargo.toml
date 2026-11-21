@@ -18,16 +18,16 @@ librelay = { git = "https://github.com/SvarogLab/librelay", tag = "v0.1.2", defa
 tokio = { version = "1.54", features = ["full"] }
 tokio-util = { version = "0.7.20", features = ["compat"] }
 futures = "0.3.34"
-zbus = { version = "6.3.0", default-features = false, features = ["tokio", "service", "proxy"] }
+zbus = { version = "6.5.0", default-features = false, features = ["tokio", "service", "proxy"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 percent-encoding = "2.3.2"
 base64 = "0.23.1"
-oo7 = { version = "0.7.1", default-features = false, features = ["tokio", "native_crypto"] }
+oo7 = { version = "0.7.3", default-features = false, features = ["tokio", "native_crypto"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 thiserror = "2.0.21"
-clap = { version = "4.6.8", features = ["derive"] }
+clap = { version = "4.6.9", features = ["derive"] }
 windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Security_Credentials"] }
 num-bigint = "0.5"
 hkdf = "0.13"
